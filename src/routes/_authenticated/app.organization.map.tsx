@@ -222,7 +222,7 @@ type ImportSummary = {
   errors: string[];
 };
 
-function ImportDialog({ orgId }: { orgId: string }) {
+export function ImportDialog({ orgId }: { orgId: string }) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [csv, setCsv] = useState("");
