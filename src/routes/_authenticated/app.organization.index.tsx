@@ -111,23 +111,29 @@ function OrganizationDashboard() {
       </section>
 
       <section className="grid gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-        <Link
-          to="/app/organization/map"
-          className="group rounded-3xl border border-border bg-card p-5 transition hover:border-accent/40 hover:bg-secondary/20"
-        >
+        <div className="group rounded-3xl border border-border bg-card p-5 transition hover:border-accent/40 hover:bg-secondary/20">
           <div className="flex items-start justify-between gap-4">
             <div>
               <div className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                 <Network className="h-3.5 w-3.5" /> Mapa da empresa
               </div>
-              <h2 className="mt-2 font-display text-2xl leading-tight">Abrir organograma</h2>
+              <h2 className="mt-2 font-display text-2xl leading-tight">Organograma vivo</h2>
               <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-                Veja a estrutura da empresa por filiais, áreas e equipes e abra os detalhes de cada núcleo.
+                Importe a estrutura por <strong>PDF, DOCX, imagem ou CSV</strong> — a IA monta a planilha para você
+                revisar — ou abra o mapa para navegar por filiais, áreas e equipes.
               </p>
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                {orgId && <ImportDialog orgId={orgId} />}
+                <Link
+                  to="/app/organization/map"
+                  className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm font-medium text-foreground/80 hover:border-accent/40 hover:text-foreground"
+                >
+                  Abrir mapa <ArrowRight className="h-4 w-4" />
+                </Link>
+              </div>
             </div>
-            <ArrowRight className="mt-1 h-5 w-5 shrink-0 text-muted-foreground transition group-hover:translate-x-1 group-hover:text-accent" />
           </div>
-        </Link>
+        </div>
 
         <div className="rounded-3xl border border-border bg-card p-5">
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
