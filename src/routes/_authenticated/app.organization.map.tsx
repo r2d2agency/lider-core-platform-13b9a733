@@ -256,10 +256,38 @@ function ImportDialog({ orgId }: { orgId: string }) {
     URL.revokeObjectURL(url);
   };
 
+  const [parsing, setParsing] = useState(false);
+
+  const fileToBase64 = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
+      reader.onerror = () => reject(new Error("Falha ao ler o arquivo"));
+      reader.readAsDataURL(file);
+    });
+
   const onFile = async (file: File | undefined) => {
     if (!file) return;
-    setCsv(await file.text());
     setPreview(null);
+    const isCsv = /\.csv$/i.test(file.name) || file.type.includes("csv") || file.type.startsWith("text/");
+    if (isCsv) {
+      setCsv(await file.text());
+      return;
+    }
+    setParsing(true);
+    try {
+      const base64 = await fileToBase64(file);
+      const out = await api<{ csv: string }>(`/organization/${orgId}/map/import/parse-file`, {
+        method: "POST",
+        body: { filename: file.name, mimeType: file.type || "application/pdf", base64 },
+      });
+      setCsv(out.csv);
+      toast.success("Organograma lido do arquivo. Revise antes de importar.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Não foi possível ler este arquivo");
+    } finally {
+      setParsing(false);
+    }
   };
 
   return (
@@ -273,27 +301,30 @@ function ImportDialog({ orgId }: { orgId: string }) {
         <DialogHeader>
           <DialogTitle>Importar estrutura da empresa</DialogTitle>
           <DialogDescription>
-            Envie um CSV com as colunas <strong>filial, area, equipe, cargo, nome, email, whatsapp, nivel,
-            lider_email</strong>. Criamos filiais, áreas, equipes e cargos automaticamente, vinculando cada pessoa ao
-            cargo e ao líder direto.
+            Envie um <strong>PDF, DOCX, imagem ou CSV</strong> do organograma. Em arquivos que não são CSV, a IA lê o
+            documento e monta a planilha (filial, área, equipe, cargo, nome, e-mail, whatsapp, nível, líder direto) para
+            você revisar antes de importar.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" className="gap-2" onClick={downloadTemplate}>
-              <Download className="h-4 w-4" /> Baixar modelo
+              <Download className="h-4 w-4" /> Baixar modelo CSV
             </Button>
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm hover:bg-secondary">
-              <Upload className="h-4 w-4" /> Escolher arquivo CSV
+              {parsing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+              {parsing ? "Lendo arquivo…" : "Escolher arquivo (PDF, DOCX, imagem ou CSV)"}
               <input
                 type="file"
-                accept=".csv,text/csv"
+                accept=".csv,text/csv,.pdf,application/pdf,.docx,.doc,image/*"
                 className="hidden"
+                disabled={parsing}
                 onChange={(e) => onFile(e.target.files?.[0])}
               />
             </label>
           </div>
+
 
           <Textarea
             value={csv}

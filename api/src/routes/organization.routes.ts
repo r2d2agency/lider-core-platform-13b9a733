@@ -8,6 +8,7 @@ import { notifyInApp } from "../lib/notifications.js";
 import { assertOrgAccess } from "../lib/org-access.js";
 import { parseCsv } from "../lib/csv.js";
 import bcrypt from "bcryptjs";
+import { completeChat, extractDocumentText } from "../lib/ai-gateway.js";
 
 /**
  * MÓDULO ORGANIZAÇÃO — base operacional da liderança.
@@ -242,6 +243,51 @@ function normalizeImportRows(rows: Record<string, string>[]) {
 organizationRouter.get("/:orgId/map/import/template", (_req, res) => {
   res.type("text/csv").send(ORG_IMPORT_TEMPLATE);
 });
+
+// Converte um arquivo (PDF, DOCX, imagem, planilha exportada em texto) no CSV
+// padrão do organograma, usando a IA configurada pelo administrador.
+const parseFileSchema = z.object({
+  filename: z.string().min(1),
+  mimeType: z.string().min(1),
+  base64: z.string().min(1),
+});
+
+organizationRouter.post("/:orgId/map/import/parse-file", async (req, res) => {
+  try {
+    const { filename, mimeType, base64 } = parseFileSchema.parse(req.body);
+    const raw = await extractDocumentText({ filename, mimeType, base64 });
+    if (!raw.trim()) return res.status(422).json({ error: "Não foi possível ler o conteúdo do arquivo." });
+
+    const csv = await completeChat({
+      temperature: 0,
+      messages: [
+        {
+          role: "system",
+          content:
+            "Você converte organogramas em CSV. Responda APENAS com CSV válido, sem comentários e sem blocos de código. " +
+            "Cabeçalho obrigatório e exato: filial,area,equipe,cargo,nome,email,whatsapp,nivel,lider_email. " +
+            "Uma linha por pessoa. 'nivel' deve ser 'lider' ou 'colaborador'. " +
+            "'lider_email' é o e-mail do gestor direto (vazio para o topo da hierarquia). " +
+            "Se não houver e-mail no documento, deixe as colunas nome/email vazias e registre apenas a estrutura (filial/area/equipe/cargo). " +
+            "Nunca invente nomes, e-mails ou cargos que não estejam no documento.",
+        },
+        { role: "user", content: `Documento: ${filename}\n\nConteúdo extraído:\n${raw}` },
+      ],
+    });
+
+    const clean = csv
+      .replace(/^```[a-z]*\s*/i, "")
+      .replace(/```\s*$/i, "")
+      .trim();
+    if (!/filial|area/i.test(clean.split(/\r?\n/)[0] ?? "")) {
+      return res.status(422).json({ error: "A IA não conseguiu montar o organograma a partir deste arquivo." });
+    }
+    res.json({ csv: clean });
+  } catch (err) {
+    return badReq(res, err);
+  }
+});
+
 
 const importBodySchema = z.object({ csv: z.string().min(1), dryRun: z.boolean().default(false) });
 
