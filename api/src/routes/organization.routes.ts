@@ -8,6 +8,7 @@ import { notifyInApp } from "../lib/notifications.js";
 import { assertOrgAccess } from "../lib/org-access.js";
 import { parseCsv } from "../lib/csv.js";
 import bcrypt from "bcryptjs";
+import { completeChat, extractDocumentText } from "../lib/ai-gateway.js";
 
 /**
  * MÓDULO ORGANIZAÇÃO — base operacional da liderança.
