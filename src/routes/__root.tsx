@@ -278,12 +278,25 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+function BootSplash() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="flex flex-col items-center gap-3">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-border border-t-primary" />
+        <span className="text-xs uppercase tracking-widest text-muted-foreground">
+          Carregando LÍDER C.O.R.E.
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
   return (
     <QueryClientProvider client={queryClient}>
-      <ClientOnly fallback={null}>
+      <ClientOnly fallback={<BootSplash />}>
         <AuthProvider>
           {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
           <Outlet />
@@ -293,4 +306,5 @@ function RootComponent() {
     </QueryClientProvider>
   );
 }
+
 
