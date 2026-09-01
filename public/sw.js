@@ -3,6 +3,8 @@
 // o login com React #418 (hydration mismatch). Mantemos este arquivo apenas
 // para remover workers/caches antigos nos navegadores já instalados.
 
+const QUEUE_STORE = "mutations";
+
 self.addEventListener("install", (event) => {
   self.skipWaiting();
   event.waitUntil(Promise.resolve());
