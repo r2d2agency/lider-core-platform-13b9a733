@@ -137,8 +137,23 @@ model User {
   franchiseMemberships FranchiseMember[]
   ownedFranchises      Franchise[]       @relation("FranchiseOwner")
   auditLogs            AuditLog[]
+  passwordResetCodes   PasswordResetCode[]
 
   @@map("users")
+}
+
+model PasswordResetCode {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String    @map("code_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  attempts  Int       @default(0)
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([userId, createdAt])
+  @@map("password_reset_codes")
 }
 
 model Profile {
@@ -1720,6 +1735,12 @@ enum CycleGoalStatus {
   dropped
 }
 
+enum GoalActionStatus {
+  pending
+  in_progress
+  done
+}
+
 model Cycle {
   id             String      @id @default(uuid()) @db.Uuid
   organizationId String      @map("organization_id") @db.Uuid
@@ -1739,27 +1760,200 @@ model Cycle {
 }
 
 model CycleGoal {
-  id          String          @id @default(uuid()) @db.Uuid
-  cycleId     String          @map("cycle_id") @db.Uuid
-  title       String
-  specific    String?
-  measurable  String?
-  achievable  String?
-  relevant    String?
-  timeBound   String?         @map("time_bound")
-  ownerUserId String?         @map("owner_user_id") @db.Uuid
-  areaId      String?         @map("area_id") @db.Uuid
-  indicatorId String?         @map("indicator_id") @db.Uuid
-  targetValue Float?          @map("target_value")
-  status      CycleGoalStatus @default(on_track)
-  createdAt   DateTime        @default(now()) @map("created_at")
-  updatedAt   DateTime        @updatedAt @map("updated_at")
+  id                 String          @id @default(uuid()) @db.Uuid
+  cycleId            String          @map("cycle_id") @db.Uuid
+  title              String
+  specific           String?
+  measurable         String?
+  achievable         String?
+  relevant           String?
+  timeBound          String?         @map("time_bound")
+  ownerUserId        String?         @map("owner_user_id") @db.Uuid
+  areaId             String?         @map("area_id") @db.Uuid
+  indicatorId        String?         @map("indicator_id") @db.Uuid
+  targetValue        Float?          @map("target_value")
+  currentValue       Float?          @map("current_value")
+  dueAt              DateTime?       @map("due_at")
+  neededIndicatorIds String[]        @default([]) @map("needed_indicator_ids")
+  status             CycleGoalStatus @default(on_track)
+  createdAt          DateTime        @default(now()) @map("created_at")
+  updatedAt          DateTime        @updatedAt @map("updated_at")
 
-  cycle Cycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  cycle         Cycle                    @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  actionItems   CycleGoalActionItem[]
+  breakdowns    CycleGoalBreakdown[]
+  teamReadiness CycleGoalTeamReadiness[]
+  cultureChecks CycleGoalCultureCheck[]
+  reflections   CycleGoalReflection[]
 
   @@index([cycleId])
   @@index([indicatorId])
   @@map("cycle_goals")
+}
+
+// Plano de ação da meta ("Bater metas").
+model CycleGoalActionItem {
+  id          String           @id @default(uuid()) @db.Uuid
+  goalId      String           @map("goal_id") @db.Uuid
+  title       String
+  description String?
+  ownerUserId String?          @map("owner_user_id") @db.Uuid
+  dueAt       DateTime?        @map("due_at")
+  status      GoalActionStatus @default(pending)
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  goal CycleGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  @@index([goalId])
+  @@map("cycle_goal_action_items")
+}
+
+// Desdobramento da meta da equipe para cada colaborador.
+model CycleGoalBreakdown {
+  id           String          @id @default(uuid()) @db.Uuid
+  goalId       String          @map("goal_id") @db.Uuid
+  memberUserId String?         @map("member_user_id") @db.Uuid
+  memberLabel  String?         @map("member_label")
+  title        String
+  indicatorId  String?         @map("indicator_id") @db.Uuid
+  targetValue  Float?          @map("target_value")
+  currentValue Float?          @map("current_value")
+  dueAt        DateTime?       @map("due_at")
+  status       CycleGoalStatus @default(on_track)
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
+
+  goal CycleGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  @@index([goalId])
+  @@map("cycle_goal_breakdowns")
+}
+
+// "Com o time": preparo da equipe para a meta, mês a mês.
+model CycleGoalTeamReadiness {
+  id          String   @id @default(uuid()) @db.Uuid
+  goalId      String   @map("goal_id") @db.Uuid
+  periodYear  Int      @map("period_year")
+  periodMonth Int      @map("period_month")
+  actions     String[] @default([])
+  monthlyPlan String?  @map("monthly_plan")
+  notes       String?
+  createdBy   String?  @map("created_by") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  goal CycleGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  @@unique([goalId, periodYear, periodMonth])
+  @@index([goalId])
+  @@map("cycle_goal_team_readiness")
+}
+
+// "Fazendo certo": coerência cultural da equipe em relação à meta.
+model CycleGoalCultureCheck {
+  id                         String   @id @default(uuid()) @db.Uuid
+  goalId                     String   @map("goal_id") @db.Uuid
+  practicesCulture           Int?     @map("practices_culture")
+  highPerformanceOrientation Int?     @map("high_performance_orientation")
+  factBasedDecisions         Int?     @map("fact_based_decisions")
+  intellectualHonesty        Int?     @map("intellectual_honesty")
+  behaviorsAlignment         Int?     @map("behaviors_alignment")
+  notes                      String?
+  createdBy                  String?  @map("created_by") @db.Uuid
+  createdAt                  DateTime @default(now()) @map("created_at")
+
+  goal CycleGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  @@index([goalId])
+  @@map("cycle_goal_culture_checks")
+}
+
+// Perguntas de apoio — reflexão do líder sobre a meta.
+model CycleGoalReflection {
+  id        String   @id @default(uuid()) @db.Uuid
+  goalId    String   @map("goal_id") @db.Uuid
+  promptKey String   @map("prompt_key")
+  answer    String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  goal CycleGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  @@unique([goalId, promptKey])
+  @@map("cycle_goal_reflections")
+}
+
+// ============================================================
+// NR-1 — Diagnóstico de riscos psicossociais + canal de denúncia anônima
+// ============================================================
+enum NR1SurveyStatus {
+  open
+  closed
+}
+
+enum NR1ComplaintStatus {
+  open
+  in_review
+  resolved
+}
+
+// Uma rodada de diagnóstico (link/QR único) para um time. Respostas são
+// anônimas por design — nada aqui identifica o respondente.
+model NR1Survey {
+  id             String          @id @default(uuid()) @db.Uuid
+  organizationId String          @map("organization_id") @db.Uuid
+  teamId         String?         @map("team_id") @db.Uuid
+  title          String
+  token          String          @unique
+  status         NR1SurveyStatus @default(open)
+  actionPlan     String?         @map("action_plan")
+  createdBy      String?         @map("created_by") @db.Uuid
+  createdAt      DateTime        @default(now()) @map("created_at")
+  closedAt       DateTime?       @map("closed_at")
+
+  responses NR1Response[]
+
+  @@index([organizationId])
+  @@map("nr1_surveys")
+}
+
+model NR1Response {
+  id           String   @id @default(uuid()) @db.Uuid
+  surveyId     String   @map("survey_id") @db.Uuid
+  answers      Json
+  riskScore    Float?   @map("risk_score")
+  respondentIp String?  @map("respondent_ip")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  survey NR1Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+
+  @@index([surveyId])
+  @@map("nr1_responses")
+}
+
+// Link permanente por organização para denúncia anônima (não atrelado a
+// nenhuma rodada de diagnóstico específica).
+model NR1ComplaintChannel {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @unique @map("organization_id")
+  token          String   @unique
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@map("nr1_complaint_channels")
+}
+
+model NR1Complaint {
+  id             String             @id @default(uuid()) @db.Uuid
+  organizationId String             @map("organization_id") @db.Uuid
+  message        String
+  category       String?
+  status         NR1ComplaintStatus @default(open)
+  respondentIp   String?            @map("respondent_ip")
+  createdAt      DateTime           @default(now()) @map("created_at")
+
+  @@index([organizationId])
+  @@map("nr1_complaints")
 }
 
 // ============================================================

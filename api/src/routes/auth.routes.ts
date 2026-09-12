@@ -4,6 +4,8 @@ import { z } from "zod";
 import { prisma } from "../prisma.js";
 import { signToken, requireAuth } from "../auth.js";
 import { resolveUserPermissions } from "../rbac.js";
+import { randomInt } from "node:crypto";
+import { sendEmail } from "../lib/notifications.js";
 
 export const authRouter = Router();
 
@@ -267,4 +269,79 @@ authRouter.post("/me/onboarding", requireAuth, async (req, res) => {
     onboardingCompletedAt: updated.onboardingCompletedAt,
     onboardingSteps: updated.onboardingSteps,
   });
+});
+
+const forgotPasswordSchema = z.object({ email: z.string().email() });
+
+authRouter.post("/forgot-password", async (req, res) => {
+  const parsed = forgotPasswordSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Informe um email válido." });
+  const email = parsed.data.email.trim().toLowerCase();
+  const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+
+  // A resposta é sempre igual para não revelar quais e-mails possuem cadastro.
+  if (!user) return res.json({ ok: true });
+  const recent = await prisma.passwordResetCode.findFirst({
+    where: { userId: user.id, createdAt: { gt: new Date(Date.now() - 60_000) } },
+  });
+  if (recent) return res.status(429).json({ error: "Aguarde um minuto antes de solicitar outro código." });
+
+  const code = String(randomInt(100000, 1000000));
+  const reset = await prisma.passwordResetCode.create({
+    data: {
+      userId: user.id,
+      codeHash: await bcrypt.hash(code, 10),
+      expiresAt: new Date(Date.now() + 15 * 60_000),
+    },
+  });
+  try {
+    await sendEmail({
+      to: email,
+      subject: "Código temporário para redefinir sua senha",
+      text: `Seu código temporário é ${code}. Ele expira em 15 minutos. Se você não solicitou a redefinição, ignore este e-mail.`,
+      html: `<div style="font-family:Arial,sans-serif;line-height:1.5;color:#172033"><h2>Redefinição de senha</h2><p>Use o código temporário abaixo para cadastrar uma nova senha:</p><p style="font-size:28px;font-weight:700;letter-spacing:6px">${code}</p><p>O código expira em 15 minutos e só pode ser usado uma vez.</p><p>Se você não fez esta solicitação, ignore este e-mail.</p></div>`,
+    });
+  } catch (error) {
+    await prisma.passwordResetCode.delete({ where: { id: reset.id } }).catch(() => undefined);
+    console.error("[auth] falha ao enviar código de redefinição", error);
+    return res.status(503).json({ error: "Não foi possível enviar o e-mail agora. Tente novamente em instantes." });
+  }
+  return res.json({ ok: true });
+});
+
+const resetPasswordSchema = z.object({
+  email: z.string().email(),
+  code: z.string().regex(/^\d{6}$/),
+  newPassword: z.string().min(8),
+});
+
+authRouter.post("/reset-password", async (req, res) => {
+  const parsed = resetPasswordSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Informe o código de 6 dígitos e uma senha com pelo menos 8 caracteres." });
+  }
+  const email = parsed.data.email.trim().toLowerCase();
+  const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+  if (!user) return res.status(400).json({ error: "Código inválido ou expirado." });
+
+  const reset = await prisma.passwordResetCode.findFirst({
+    where: { userId: user.id, usedAt: null },
+    orderBy: { createdAt: "desc" },
+  });
+  if (!reset || reset.expiresAt < new Date() || reset.attempts >= 5) {
+    return res.status(400).json({ error: "Código inválido ou expirado." });
+  }
+  const valid = await bcrypt.compare(parsed.data.code, reset.codeHash);
+  if (!valid) {
+    await prisma.passwordResetCode.update({ where: { id: reset.id }, data: { attempts: { increment: 1 } } });
+    return res.status(400).json({ error: "Código inválido ou expirado." });
+  }
+
+  const now = new Date();
+  const passwordHash = await bcrypt.hash(parsed.data.newPassword, 10);
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: user.id }, data: { passwordHash } }),
+    prisma.passwordResetCode.updateMany({ where: { userId: user.id, usedAt: null }, data: { usedAt: now } }),
+  ]);
+  return res.json({ ok: true });
 });

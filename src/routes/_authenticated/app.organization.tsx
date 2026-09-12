@@ -12,8 +12,6 @@ import {
   MessageSquareHeart,
   Network,
   ScrollText,
-  Target,
-  Users,
   Workflow,
 } from "lucide-react";
 import { useCurrentOrg } from "@/lib/use-current-org";
@@ -25,43 +23,104 @@ export const Route = createFileRoute("/_authenticated/app/organization")({
 type Tint = "orange" | "slate" | "violet" | "sky" | "emerald" | "rose";
 type NavItem = { to: string; label: string; icon: typeof Gauge; tint: Tint; exact?: boolean };
 const nav: NavItem[] = [
-  { to: "/app/organization",             label: "Painel",         icon: Gauge,         tint: "orange", exact: true },
-  { to: "/app/organization/map",         label: "Mapa da empresa",icon: Network,       tint: "slate" },
-  { to: "/app/organization/areas",       label: "Áreas",          icon: LayoutGrid,    tint: "slate" },
-  { to: "/app/team",                     label: "Equipes",        icon: Users,         tint: "slate" },
-  { to: "/app/organization/roles",       label: "Cargos",         icon: IdCard,        tint: "slate" },
-  { to: "/app/organization/rituals",     label: "Rituais",        icon: Workflow,      tint: "violet" },
-  { to: "/app/organization/agenda",      label: "Agenda",         icon: Calendar,      tint: "sky" },
-  { to: "/app/organization/delegations", label: "Delegações",     icon: ClipboardList, tint: "emerald" },
-  { to: "/app/organization/agreements",  label: "Acordos",        icon: Handshake,     tint: "rose" },
-  { to: "/app/pulses",                   label: "Pulsos",         icon: MessageSquareHeart, tint: "violet" },
-  { to: "/app/organization/cycles",      label: "Ciclos & metas", icon: Target,        tint: "emerald" },
-  { to: "/app/organization/decisions",   label: "Decisões",       icon: ScrollText,    tint: "orange" },
-  { to: "/app/organization/documents",   label: "Base documental",icon: FileText,      tint: "slate" },
+  { to: "/app/organization", label: "Painel", icon: Gauge, tint: "orange", exact: true },
+  { to: "/app/organization/map", label: "Mapa da empresa", icon: Network, tint: "slate" },
+  { to: "/app/organization/areas", label: "Áreas", icon: LayoutGrid, tint: "slate" },
+  { to: "/app/organization/roles", label: "Cargos", icon: IdCard, tint: "slate" },
+  { to: "/app/organization/rituals", label: "Rituais", icon: Workflow, tint: "violet" },
+  { to: "/app/consciencia/agenda", label: "Agenda do líder", icon: Calendar, tint: "sky" },
+  { to: "/app/organization/agenda", label: "Agenda organizacional", icon: Calendar, tint: "sky" },
+  {
+    to: "/app/organization/delegations",
+    label: "Delegações",
+    icon: ClipboardList,
+    tint: "emerald",
+  },
+  { to: "/app/organization/agreements", label: "Acordos", icon: Handshake, tint: "rose" },
+  { to: "/app/organization/decisions", label: "Decisões", icon: ScrollText, tint: "orange" },
+  { to: "/app/organization/documents", label: "Base documental", icon: FileText, tint: "slate" },
+  { to: "/app/pulses", label: "Pulso da equipe", icon: MessageSquareHeart, tint: "violet" },
 ];
 
+// Páginas que, embora fisicamente aninhadas na rota /app/organization/*,
+// pertencem visualmente a outro pilar (ex: Metas do time é Módulo R).
+// Para essas, o layout não desenha o cabeçalho/grid de Organização —
+// a própria página renderiza seu cabeçalho de pilar.
+const FOREIGN_PILLAR_PATHS = new Set<string>(["/app/organization/cycles"]);
+
 const TINT_MAP: Record<Tint, { bg: string; fg: string; ring: string }> = {
-  orange:  { bg: "bg-accent/10",                                       fg: "text-accent",                              ring: "ring-accent/30" },
-  slate:   { bg: "bg-secondary",                                        fg: "text-foreground",                          ring: "ring-border" },
-  violet:  { bg: "bg-violet-100 dark:bg-violet-500/15",                fg: "text-violet-600 dark:text-violet-300",     ring: "ring-violet-200 dark:ring-violet-500/25" },
-  sky:     { bg: "bg-sky-100 dark:bg-sky-500/15",                       fg: "text-sky-600 dark:text-sky-300",           ring: "ring-sky-200 dark:ring-sky-500/25" },
-  emerald: { bg: "bg-emerald-100 dark:bg-emerald-500/15",              fg: "text-emerald-600 dark:text-emerald-300",   ring: "ring-emerald-200 dark:ring-emerald-500/25" },
-  rose:    { bg: "bg-rose-100 dark:bg-rose-500/15",                    fg: "text-rose-600 dark:text-rose-300",         ring: "ring-rose-200 dark:ring-rose-500/25" },
+  orange: { bg: "bg-accent/10", fg: "text-accent", ring: "ring-accent/30" },
+  slate: { bg: "bg-secondary", fg: "text-foreground", ring: "ring-border" },
+  violet: {
+    bg: "bg-violet-100 dark:bg-violet-500/15",
+    fg: "text-violet-600 dark:text-violet-300",
+    ring: "ring-violet-200 dark:ring-violet-500/25",
+  },
+  sky: {
+    bg: "bg-sky-100 dark:bg-sky-500/15",
+    fg: "text-sky-600 dark:text-sky-300",
+    ring: "ring-sky-200 dark:ring-sky-500/25",
+  },
+  emerald: {
+    bg: "bg-emerald-100 dark:bg-emerald-500/15",
+    fg: "text-emerald-600 dark:text-emerald-300",
+    ring: "ring-emerald-200 dark:ring-emerald-500/25",
+  },
+  rose: {
+    bg: "bg-rose-100 dark:bg-rose-500/15",
+    fg: "text-rose-600 dark:text-rose-300",
+    ring: "ring-rose-200 dark:ring-rose-500/25",
+  },
 };
 
 const PAGE_META: Record<string, { title: string; description: string }> = {
-  "/app/organization":              { title: "Ambiente do líder",   description: "Estruture sua operação e crie o ambiente onde a liderança acontece todos os dias." },
-  "/app/organization/map":          { title: "Mapa da empresa",     description: "Organograma vivo: pessoas, áreas e cadeia de decisão." },
-  "/app/organization/areas":        { title: "Áreas da empresa",    description: "Estruture unidades, times e responsáveis." },
-  "/app/organization/roles":        { title: "Cargos",              description: "Papéis, atribuições e níveis de senioridade." },
-  "/app/organization/rituals":      { title: "Rituais",             description: "Cadência de rituais que sustentam a operação." },
-  "/app/organization/agenda":       { title: "Agenda do líder",     description: "Visualize seus compromissos, rituais e prioridades dos próximos dias." },
-  "/app/organization/delegations":  { title: "Delegações",          description: "Combinados claros com prazos e responsáveis." },
-  "/app/organization/agreements":   { title: "Acordos do time",     description: "Comportamentos-padrão e entregas que o time não abre mão para cumprir os objetivos." },
-  "/app/pulses":                    { title: "Pulsos",              description: "Envie um link único por WhatsApp e receba feedback, clima ou DISC direto do liderado — sem login." },
-  "/app/organization/cycles":       { title: "Ciclos & metas",      description: "Trimestres, campanhas e metas SMART ligadas aos indicadores." },
-  "/app/organization/decisions":    { title: "Decisões",            description: "Registro vivo das decisões e seus desdobramentos." },
-  "/app/organization/documents":    { title: "Base documental",     description: "Documentos, políticas e artefatos organizacionais." },
+  "/app/organization": {
+    title: "Ambiente do líder",
+    description:
+      "Estruture sua operação e crie o ambiente onde a liderança acontece todos os dias.",
+  },
+  "/app/organization/map": {
+    title: "Mapa da empresa",
+    description: "Organograma vivo: pessoas, áreas e cadeia de decisão.",
+  },
+  "/app/organization/areas": {
+    title: "Áreas da empresa",
+    description: "Estruture unidades, times e responsáveis.",
+  },
+  "/app/organization/roles": {
+    title: "Cargos",
+    description: "Papéis, atribuições e níveis de senioridade.",
+  },
+  "/app/organization/rituals": {
+    title: "Rituais",
+    description: "Cadência de rituais que sustentam a operação.",
+  },
+  "/app/organization/agenda": {
+    title: "Agenda organizacional",
+    description: "Visualize os compromissos, rituais e prioridades de toda a organização.",
+  },
+  "/app/organization/delegations": {
+    title: "Delegações",
+    description: "Combinados claros com prazos e responsáveis.",
+  },
+  "/app/organization/agreements": {
+    title: "Acordos do time",
+    description:
+      "Comportamentos-padrão e entregas que o time não abre mão para cumprir os objetivos.",
+  },
+  "/app/pulses": {
+    title: "Pulsos",
+    description:
+      "Envie um link único por WhatsApp e receba feedback, clima ou DISC direto do liderado — sem login.",
+  },
+  "/app/organization/decisions": {
+    title: "Decisões",
+    description: "Registro vivo das decisões e seus desdobramentos.",
+  },
+  "/app/organization/documents": {
+    title: "Base documental",
+    description: "Documentos, políticas e artefatos organizacionais.",
+  },
 };
 
 function OrganizationLayout() {
@@ -69,78 +128,88 @@ function OrganizationLayout() {
   const { current, orgs, setOrgId } = useCurrentOrg();
   const meta = PAGE_META[pathname] ?? PAGE_META["/app/organization"];
   const isHome = pathname === "/app/organization";
+  const isForeignPillar = FOREIGN_PILLAR_PATHS.has(pathname);
 
   return (
     <div className="mx-auto max-w-6xl">
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-6">
-        <div className="min-w-0 flex-1">
-          <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-            <Activity className="h-3.5 w-3.5" style={{ color: 'var(--pilar-o)' }} /> Módulo Organização
-          </span>
-          <h1 className="mt-3 font-display text-3xl leading-tight sm:text-4xl">
-            {meta.title}
-            {isHome && <span className="text-accent">.</span>}
-          </h1>
-          <p className="mt-2 max-w-xl text-sm text-muted-foreground">{meta.description}</p>
-        </div>
-        {isHome && <HeroCubes />}
-        {orgs.length > 1 && current && (
-          <select
-            value={current.id}
-            onChange={(e) => setOrgId(e.target.value)}
-            className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-          >
-            {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-          </select>
-        )}
-      </div>
+      {!isForeignPillar && (
+        <>
+          <div className="mb-6 flex flex-wrap items-start justify-between gap-6">
+            <div className="min-w-0 flex-1">
+              <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                <Activity className="h-3.5 w-3.5" style={{ color: "var(--pilar-o)" }} /> Módulo
+                Organização
+              </span>
+              <h1 className="mt-3 font-display text-3xl leading-tight sm:text-4xl">
+                {meta.title}
+                {isHome && <span className="text-accent">.</span>}
+              </h1>
+              <p className="mt-2 max-w-xl text-sm text-muted-foreground">{meta.description}</p>
+            </div>
+            {isHome && <HeroCubes />}
+            {orgs.length > 1 && current && (
+              <select
+                value={current.id}
+                onChange={(e) => setOrgId(e.target.value)}
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+              >
+                {orgs.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
 
-      {/* Grid de atalhos do módulo (ícones) */}
-      <nav className="mb-6">
-        <ul className="grid grid-cols-5 gap-2 sm:gap-3">
-          {nav.map(({ to, label, icon: Icon, tint, exact }, idx) => {
-            const active = exact ? pathname === to : pathname === to;
-            const t = TINT_MAP[tint];
-            return (
-              <li key={to + idx}>
-                <Link
-                  to={to}
-                  className={
-                    "group flex h-full flex-col items-center justify-center gap-2 rounded-2xl border bg-card px-2 py-4 text-center transition-all " +
-                    (active
-                      ? "border-accent/50 shadow-[0_10px_30px_-18px] shadow-accent/60"
-                      : "border-border hover:-translate-y-0.5 hover:border-accent/30 hover:shadow-sm")
-                  }
-                >
-                  <span
-                    className={
-                      "grid h-10 w-10 place-items-center rounded-xl ring-1 " +
-                      t.bg + " " + t.fg + " " + t.ring
-                    }
-                  >
-                    <Icon className="h-5 w-5" strokeWidth={1.75} />
-                  </span>
-                  <span
-                    className={
-                      "text-[11px] font-semibold leading-tight " +
-                      (active ? "text-foreground" : "text-foreground/80")
-                    }
-                  >
-                    {label}
-                  </span>
-                  {active && <span className="h-0.5 w-6 rounded-full bg-accent" />}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
-
-      {!current ? (
-        <EmptyOrg />
-      ) : (
-        <Outlet />
+          {/* Grid de atalhos do módulo (ícones) */}
+          <nav className="mb-6">
+            <ul className="grid grid-cols-5 gap-2 sm:gap-3">
+              {nav.map(({ to, label, icon: Icon, tint, exact }, idx) => {
+                const active = exact ? pathname === to : pathname === to;
+                const t = TINT_MAP[tint];
+                return (
+                  <li key={to + idx}>
+                    <Link
+                      to={to}
+                      className={
+                        "group flex h-full flex-col items-center justify-center gap-2 rounded-2xl border bg-card px-2 py-4 text-center transition-all " +
+                        (active
+                          ? "border-accent/50 shadow-[0_10px_30px_-18px] shadow-accent/60"
+                          : "border-border hover:-translate-y-0.5 hover:border-accent/30 hover:shadow-sm")
+                      }
+                    >
+                      <span
+                        className={
+                          "grid h-10 w-10 place-items-center rounded-xl ring-1 " +
+                          t.bg +
+                          " " +
+                          t.fg +
+                          " " +
+                          t.ring
+                        }
+                      >
+                        <Icon className="h-5 w-5" strokeWidth={1.75} />
+                      </span>
+                      <span
+                        className={
+                          "text-[11px] font-semibold leading-tight " +
+                          (active ? "text-foreground" : "text-foreground/80")
+                        }
+                      >
+                        {label}
+                      </span>
+                      {active && <span className="h-0.5 w-6 rounded-full bg-accent" />}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
+        </>
       )}
+
+      {!current ? <EmptyOrg /> : <Outlet />}
     </div>
   );
 }
@@ -165,8 +234,8 @@ function EmptyOrg() {
     <div className="rounded-2xl border border-dashed border-border p-10 text-center">
       <BookOpen className="mx-auto h-8 w-8 text-muted-foreground" />
       <p className="mt-3 text-sm text-muted-foreground">
-        Você ainda não pertence a nenhuma organização. Peça a um administrador
-        para incluir você em uma empresa.
+        Você ainda não pertence a nenhuma organização. Peça a um administrador para incluir você em
+        uma empresa.
       </p>
     </div>
   );

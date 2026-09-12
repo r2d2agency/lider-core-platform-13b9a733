@@ -1,6 +1,18 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Activity, ArrowRight, CalendarRange, CheckCircle2, Compass, Loader2, Scale, Target, TrendingDown, TrendingUp, Wrench } from "lucide-react";
+import {
+  Activity,
+  ArrowRight,
+  CalendarRange,
+  CheckCircle2,
+  Compass,
+  Loader2,
+  Scale,
+  Target,
+  TrendingDown,
+  TrendingUp,
+  Wrench,
+} from "lucide-react";
 import { api } from "@/lib/api";
 import { useCurrentOrg } from "@/lib/use-current-org";
 
@@ -68,11 +80,19 @@ type MetaVsReal = {
   }>;
 };
 
-const DEV_META: Record<DeviationClass, { label: string; tone: string; dot: string; icon: typeof Wrench }> = {
-  on_target:   { label: "No verde",     tone: "text-emerald-600", dot: "bg-emerald-500", icon: CheckCircle2 },
-  recuperando: { label: "Recuperando",  tone: "text-sky-600",     dot: "bg-sky-500",     icon: Compass },
-  execucao:    { label: "Execução",     tone: "text-rose-600",    dot: "bg-rose-500",    icon: Wrench },
-  calibracao:  { label: "Calibração",   tone: "text-amber-600",   dot: "bg-amber-500",   icon: Scale },
+const DEV_META: Record<
+  DeviationClass,
+  { label: string; tone: string; dot: string; icon: typeof Wrench }
+> = {
+  on_target: {
+    label: "No verde",
+    tone: "text-emerald-600",
+    dot: "bg-emerald-500",
+    icon: CheckCircle2,
+  },
+  recuperando: { label: "Recuperando", tone: "text-sky-600", dot: "bg-sky-500", icon: Compass },
+  execucao: { label: "Execução", tone: "text-rose-600", dot: "bg-rose-500", icon: Wrench },
+  calibracao: { label: "Calibração", tone: "text-amber-600", dot: "bg-amber-500", icon: Scale },
 };
 
 const STATUS_DOT: Record<IndicatorStatus, string> = {
@@ -89,10 +109,10 @@ const STATUS_LABEL: Record<IndicatorStatus, string> = {
 };
 const GOAL_META: Record<GoalStatus, { label: string; dot: string; tone: string }> = {
   off_track: { label: "Atrasada", dot: "bg-rose-500", tone: "text-rose-600" },
-  at_risk:   { label: "Em risco", dot: "bg-amber-500", tone: "text-amber-600" },
-  on_track:  { label: "No prumo", dot: "bg-emerald-500", tone: "text-emerald-600" },
-  done:      { label: "Concluída", dot: "bg-sky-500", tone: "text-sky-600" },
-  dropped:   { label: "Descartada", dot: "bg-muted-foreground", tone: "text-muted-foreground" },
+  at_risk: { label: "Em risco", dot: "bg-amber-500", tone: "text-amber-600" },
+  on_track: { label: "No prumo", dot: "bg-emerald-500", tone: "text-emerald-600" },
+  done: { label: "Concluída", dot: "bg-sky-500", tone: "text-sky-600" },
+  dropped: { label: "Descartada", dot: "bg-muted-foreground", tone: "text-muted-foreground" },
 };
 
 function ResultsPage() {
@@ -122,16 +142,20 @@ function ResultsPage() {
   const data = q.data;
   if (!data) return null;
 
-  const total = data.totals.on_target + data.totals.warning + data.totals.off_target + data.totals.unknown;
+  const total =
+    data.totals.on_target + data.totals.warning + data.totals.off_target + data.totals.unknown;
 
   return (
     <div className="space-y-8">
       <header className="flex items-end justify-between gap-4">
         <div>
-          <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Resultado</div>
+          <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+            Resultado
+          </div>
           <h1 className="mt-1 font-display text-3xl">Gestão à vista</h1>
           <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-            Um único painel para ver, sem rodeios, onde está no verde, onde precisa de atenção e o que o ciclo atual promete entregar.
+            Um único painel para ver, sem rodeios, onde está no verde, onde precisa de atenção e o
+            que o ciclo atual promete entregar.
           </p>
         </div>
         <Link
@@ -144,9 +168,24 @@ function ResultsPage() {
 
       <section className="grid gap-3 md:grid-cols-4">
         <StatTile label="Indicadores" value={total} icon={<Target className="h-4 w-4" />} />
-        <StatTile label="Dentro da meta" value={data.totals.on_target} tone="text-emerald-600" dot="bg-emerald-500" />
-        <StatTile label="Perto do limite" value={data.totals.warning} tone="text-amber-600" dot="bg-amber-500" />
-        <StatTile label="Fora da meta" value={data.totals.off_target} tone="text-rose-600" dot="bg-rose-500" />
+        <StatTile
+          label="Dentro da meta"
+          value={data.totals.on_target}
+          tone="text-emerald-600"
+          dot="bg-emerald-500"
+        />
+        <StatTile
+          label="Perto do limite"
+          value={data.totals.warning}
+          tone="text-amber-600"
+          dot="bg-amber-500"
+        />
+        <StatTile
+          label="Fora da meta"
+          value={data.totals.off_target}
+          tone="text-rose-600"
+          dot="bg-rose-500"
+        />
       </section>
 
       <section className="space-y-4">
@@ -156,7 +195,11 @@ function ResultsPage() {
         </div>
         {data.areas.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
-            Cadastre indicadores em <Link to="/app/indicators" className="text-accent hover:underline">Indicadores</Link> para ver o painel.
+            Cadastre indicadores em{" "}
+            <Link to="/app/indicators" className="text-accent hover:underline">
+              Indicadores
+            </Link>{" "}
+            para ver o painel.
           </div>
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
@@ -170,18 +213,23 @@ function ResultsPage() {
       <section className="space-y-4">
         <div className="flex items-end justify-between gap-3">
           <div>
-            <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Diagnóstico</div>
+            <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+              Diagnóstico
+            </div>
             <h2 className="mt-1 flex items-center gap-2 font-display text-xl">
               <Scale className="h-4 w-4 text-accent" /> Meta × Realizado
             </h2>
             <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-              Cada desvio tem origem: ou a execução falhou, ou a meta foi mal calibrada. O sistema separa os dois para você agir no lugar certo.
+              Cada desvio tem origem: ou a execução falhou, ou a meta foi mal calibrada. O sistema
+              separa os dois para você agir no lugar certo.
             </p>
           </div>
         </div>
 
         {mvr.isLoading ? (
-          <div className="rounded-2xl border border-border bg-card p-6 text-sm text-muted-foreground">Analisando…</div>
+          <div className="rounded-2xl border border-border bg-card p-6 text-sm text-muted-foreground">
+            Analisando…
+          </div>
         ) : !mvr.data || mvr.data.rows.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
             Sem indicadores com meta e leituras suficientes ainda.
@@ -211,7 +259,12 @@ function ResultsPage() {
               {mvr.data.rows
                 .slice()
                 .sort((a, b) => {
-                  const order: Record<DeviationClass, number> = { execucao: 0, calibracao: 1, recuperando: 2, on_target: 3 };
+                  const order: Record<DeviationClass, number> = {
+                    execucao: 0,
+                    calibracao: 1,
+                    recuperando: 2,
+                    on_target: 3,
+                  };
                   return order[a.classification] - order[b.classification];
                 })
                 .slice(0, 12)
@@ -219,7 +272,10 @@ function ResultsPage() {
                   const m = DEV_META[r.classification];
                   const Icon = m.icon;
                   return (
-                    <li key={r.id} className="grid gap-2 px-4 py-3 md:grid-cols-[1fr_auto_auto_auto] md:items-center md:gap-4">
+                    <li
+                      key={r.id}
+                      className="grid gap-2 px-4 py-3 md:grid-cols-[1fr_auto_auto_auto] md:items-center md:gap-4"
+                    >
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <span className={"inline-block h-2 w-2 rounded-full " + m.dot} />
@@ -233,12 +289,34 @@ function ResultsPage() {
                         <div className="mt-1 text-xs text-muted-foreground">{r.diagnostic}</div>
                       </div>
                       <div className="hidden text-right tabular-nums text-sm md:block">
-                        <div>{r.lastValue}{r.unit ?? ""} <span className="text-muted-foreground">/ meta {r.target}{r.unit ?? ""}</span></div>
-                        <div className={"text-[11px] " + (r.status === "on_target" ? "text-emerald-600" : r.status === "warning" ? "text-amber-600" : "text-rose-600")}>
-                          {r.gapPct > 0 ? "+" : ""}{r.gapPct}%
+                        <div>
+                          {r.lastValue}
+                          {r.unit ?? ""}{" "}
+                          <span className="text-muted-foreground">
+                            / meta {r.target}
+                            {r.unit ?? ""}
+                          </span>
+                        </div>
+                        <div
+                          className={
+                            "text-[11px] " +
+                            (r.status === "on_target"
+                              ? "text-emerald-600"
+                              : r.status === "warning"
+                                ? "text-amber-600"
+                                : "text-rose-600")
+                          }
+                        >
+                          {r.gapPct > 0 ? "+" : ""}
+                          {r.gapPct}%
                         </div>
                       </div>
-                      <span className={"inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-[10px] uppercase tracking-widest " + m.tone}>
+                      <span
+                        className={
+                          "inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-[10px] uppercase tracking-widest " +
+                          m.tone
+                        }
+                      >
                         <Icon className="h-3 w-3" /> {m.label}
                       </span>
                       <Link
@@ -261,17 +339,27 @@ function ResultsPage() {
           <h2 className="font-display text-xl">Ciclo ativo</h2>
           {data.activeCycle && (
             <span className="text-xs text-muted-foreground">
-              {data.activeCycle.name} · {new Date(data.activeCycle.startAt).toLocaleDateString("pt-BR")}—{new Date(data.activeCycle.endAt).toLocaleDateString("pt-BR")}
+              {data.activeCycle.name} ·{" "}
+              {new Date(data.activeCycle.startAt).toLocaleDateString("pt-BR")}—
+              {new Date(data.activeCycle.endAt).toLocaleDateString("pt-BR")}
             </span>
           )}
         </div>
         {!data.activeCycle ? (
           <div className="rounded-2xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
-            Nenhum ciclo ativo. Abra um em <Link to="/app/organization/cycles" className="text-accent hover:underline">Ciclos & metas</Link>.
+            Nenhum ciclo ativo. Abra um em{" "}
+            <Link to="/app/organization/cycles" className="text-accent hover:underline">
+              Metas do time
+            </Link>
+            .
           </div>
         ) : data.activeCycle.goals.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-            Ciclo aberto sem metas SMART. <Link to="/app/organization/cycles" className="text-accent hover:underline">Adicionar meta</Link>.
+            Ciclo aberto sem metas SMART.{" "}
+            <Link to="/app/organization/cycles" className="text-accent hover:underline">
+              Adicionar meta
+            </Link>
+            .
           </div>
         ) : (
           <ul className="divide-y divide-border rounded-2xl border border-border bg-card">
@@ -279,13 +367,21 @@ function ResultsPage() {
               const gm = GOAL_META[g.status];
               return (
                 <li key={g.id} className="flex items-center gap-4 px-4 py-3">
-                  <span className="w-6 text-right font-display text-sm text-muted-foreground">{idx + 1}</span>
+                  <span className="w-6 text-right font-display text-sm text-muted-foreground">
+                    {idx + 1}
+                  </span>
                   <span className={"inline-block h-2 w-2 rounded-full " + gm.dot} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium">{g.title}</div>
-                    {g.measurable && <div className="truncate text-xs text-muted-foreground">M · {g.measurable}</div>}
+                    {g.measurable && (
+                      <div className="truncate text-xs text-muted-foreground">
+                        M · {g.measurable}
+                      </div>
+                    )}
                   </div>
-                  <span className={"text-[10px] uppercase tracking-widest " + gm.tone}>{gm.label}</span>
+                  <span className={"text-[10px] uppercase tracking-widest " + gm.tone}>
+                    {gm.label}
+                  </span>
                 </li>
               );
             })}
@@ -296,7 +392,19 @@ function ResultsPage() {
   );
 }
 
-function StatTile({ label, value, tone, dot, icon }: { label: string; value: number; tone?: string; dot?: string; icon?: React.ReactNode }) {
+function StatTile({
+  label,
+  value,
+  tone,
+  dot,
+  icon,
+}: {
+  label: string;
+  value: number;
+  tone?: string;
+  dot?: string;
+  icon?: React.ReactNode;
+}) {
   return (
     <div className="rounded-2xl border border-border bg-card p-4">
       <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-muted-foreground">
@@ -310,12 +418,16 @@ function StatTile({ label, value, tone, dot, icon }: { label: string; value: num
 }
 
 function AreaCard({ area }: { area: AreaBlock }) {
-  const total = area.counts.on_target + area.counts.warning + area.counts.off_target + area.counts.unknown;
+  const total =
+    area.counts.on_target + area.counts.warning + area.counts.off_target + area.counts.unknown;
   const healthTone =
-    area.health == null ? "text-muted-foreground"
-      : area.health >= 80 ? "text-emerald-600"
-      : area.health >= 60 ? "text-amber-600"
-      : "text-rose-600";
+    area.health == null
+      ? "text-muted-foreground"
+      : area.health >= 80
+        ? "text-emerald-600"
+        : area.health >= 60
+          ? "text-amber-600"
+          : "text-rose-600";
 
   return (
     <div className="rounded-2xl border border-border bg-card p-5">
@@ -334,7 +446,9 @@ function AreaCard({ area }: { area: AreaBlock }) {
         <StatusChip dot="bg-emerald-500" label={`${area.counts.on_target} no verde`} />
         <StatusChip dot="bg-amber-500" label={`${area.counts.warning} atenção`} />
         <StatusChip dot="bg-rose-500" label={`${area.counts.off_target} fora`} />
-        {area.counts.unknown > 0 && <StatusChip dot="bg-muted-foreground/50" label={`${area.counts.unknown} s/ leitura`} />}
+        {area.counts.unknown > 0 && (
+          <StatusChip dot="bg-muted-foreground/50" label={`${area.counts.unknown} s/ leitura`} />
+        )}
         <span className="ml-auto text-muted-foreground">{total} ind.</span>
       </div>
 
@@ -342,22 +456,35 @@ function AreaCard({ area }: { area: AreaBlock }) {
         {area.indicators.slice(0, 6).map((i) => {
           const DeltaIcon = (i.delta ?? 0) >= 0 ? TrendingUp : TrendingDown;
           const deltaTone =
-            i.delta == null ? "text-muted-foreground"
-              : (i.direction === "higher_better" ? i.delta >= 0 : i.delta <= 0) ? "text-emerald-600" : "text-rose-600";
+            i.delta == null
+              ? "text-muted-foreground"
+              : (i.direction === "higher_better" ? i.delta >= 0 : i.delta <= 0)
+                ? "text-emerald-600"
+                : "text-rose-600";
           return (
-            <li key={i.id} className="flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-secondary/60">
-              <span className={"inline-block h-2 w-2 shrink-0 rounded-full " + STATUS_DOT[i.status]} title={STATUS_LABEL[i.status]} />
+            <li
+              key={i.id}
+              className="flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-secondary/60"
+            >
+              <span
+                className={"inline-block h-2 w-2 shrink-0 rounded-full " + STATUS_DOT[i.status]}
+                title={STATUS_LABEL[i.status]}
+              />
               <span className="min-w-0 flex-1 truncate text-sm">{i.name}</span>
               <span className="tabular-nums text-sm text-foreground/80">
                 {i.lastReading ? `${i.lastReading.value}${i.unit ?? ""}` : "—"}
               </span>
               {i.target != null && (
-                <span className="hidden text-[10px] text-muted-foreground sm:inline">meta {i.target}{i.unit ?? ""}</span>
+                <span className="hidden text-[10px] text-muted-foreground sm:inline">
+                  meta {i.target}
+                  {i.unit ?? ""}
+                </span>
               )}
               {i.delta != null && i.delta !== 0 && (
                 <span className={"flex items-center gap-0.5 text-[11px] " + deltaTone}>
                   <DeltaIcon className="h-3 w-3" />
-                  {i.delta > 0 ? "+" : ""}{Math.round(i.delta * 100) / 100}
+                  {i.delta > 0 ? "+" : ""}
+                  {Math.round(i.delta * 100) / 100}
                 </span>
               )}
             </li>

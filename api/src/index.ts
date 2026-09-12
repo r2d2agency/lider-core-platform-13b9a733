@@ -27,6 +27,7 @@ import { dashboardRouter } from "./routes/dashboard.routes.js";
 import { threeSixtyRouter } from "./routes/three-sixty.routes.js";
 import { pulsesRouter, publicPulsesRouter } from "./routes/pulses.routes.js";
 import { cyclesRouter } from "./routes/cycles.routes.js";
+import { nr1Router, publicNr1Router } from "./routes/nr1.routes.js";
 import { kudosRouter } from "./routes/kudos.routes.js";
 import { coachRouter } from "./routes/coach.routes.js";
 import { calendarRouter, calendarPublicRouter } from "./routes/calendar.routes.js";
@@ -116,6 +117,7 @@ app.get("/health", (_req, res) => res.json({ ok: true, ts: Date.now() }));
 // authenticates itself via the token/secret stored in PlatformSetting.
 app.use("/api/public", webhooksRouter);
 app.use("/api/public", publicPulsesRouter);
+app.use("/api/public", publicNr1Router);
 app.use("/api/public", calendarPublicRouter);
 app.use("/api/public", publicAssessmentsRouter);
 // Rota pública de listagem de planos de cadastro
@@ -145,6 +147,7 @@ app.use("/organization", oneOnOnesRouter);
 app.use("/organization", threeSixtyRouter);
 app.use("/organization", pulsesRouter);
 app.use("/organization", cyclesRouter);
+app.use("/organization", nr1Router);
 app.use("/organization", jornadaRouter);
 app.use("/organization", kudosRouter);
 app.use("/organization", coachRouter);

@@ -1,7 +1,23 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Loader2, Save, Sparkles, TrendingUp, CheckSquare, Target, MessageSquare, Building2, Users2, Heart } from "lucide-react";
+import {
+  Loader2,
+  Save,
+  Sparkles,
+  TrendingUp,
+  CheckSquare,
+  Target,
+  MessageSquare,
+  Building2,
+  Users2,
+  Heart,
+  ClipboardList,
+  ListChecks,
+  ChevronRight,
+  AlertTriangle,
+  Activity,
+} from "lucide-react";
 import { api } from "@/lib/api";
 import { useCurrentOrg } from "@/lib/use-current-org";
 import { Button } from "@/components/ui/button";
@@ -59,11 +75,323 @@ type TimelineEvent = {
   score?: number;
 };
 
+// ---------- Painel executivo (item 5 do PDF de reorganização) ----------
+
+type TodayItem = {
+  id: string;
+  type:
+    | "delegation_overdue"
+    | "delegation_due_soon"
+    | "ritual_today"
+    | "one_on_one"
+    | "signal"
+    | "team_drop";
+  priority: 1 | 2 | 3;
+  title: string;
+  subtitle: string;
+  cta: string;
+  href: string;
+};
+type TodayResp = {
+  items: TodayItem[];
+  counts: { overdue: number; dueSoon: number; rituals: number; oneOnOnes: number; signals: number };
+};
+type TeamHealthResp = {
+  score: number | null;
+  delta: number;
+  membersAtRisk: number;
+  members: unknown[];
+};
+type OverviewGoal = {
+  id: string;
+  title: string;
+  status: "on_track" | "at_risk" | "off_track" | "done" | "dropped";
+  targetValue: number | null;
+  currentValue: number | null;
+  dueAt: string | null;
+};
+type ResultsOverview = {
+  totals: { on_target: number; warning: number; off_target: number; unknown: number };
+  activeCycle: {
+    id: string;
+    name: string;
+    startAt: string;
+    endAt: string;
+    goals: OverviewGoal[];
+  } | null;
+};
+type PendingAction = {
+  id: string;
+  title: string;
+  dueAt: string | null;
+  status: "pending" | "in_progress" | "done";
+  goal: { id: string; title: string; dueAt: string | null };
+};
+
+const GOAL_DOT: Record<OverviewGoal["status"], string> = {
+  on_track: "bg-emerald-500",
+  at_risk: "bg-amber-500",
+  off_track: "bg-rose-500",
+  done: "bg-sky-500",
+  dropped: "bg-muted-foreground",
+};
+
+function projectGoal(g: OverviewGoal, cycle: { startAt: string; endAt: string }) {
+  if (g.targetValue == null || g.currentValue == null) return null;
+  const start = new Date(cycle.startAt).getTime();
+  const end = new Date(g.dueAt ?? cycle.endAt).getTime();
+  const now = Date.now();
+  const elapsed = now - start;
+  const total = end - start;
+  if (elapsed <= 0 || total <= 0) return null;
+  const projected = (g.currentValue / elapsed) * total;
+  return Math.round(projected);
+}
+
+function CockpitCard({
+  icon,
+  title,
+  to,
+  children,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  to?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="card-elevated flex flex-col p-5">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+          {icon} {title}
+        </div>
+        {to && (
+          <Link
+            to={to}
+            className="inline-flex items-center gap-0.5 text-[11px] font-medium text-accent hover:underline"
+          >
+            Ver tudo <ChevronRight className="h-3 w-3" />
+          </Link>
+        )}
+      </div>
+      <div className="flex-1 space-y-2">{children}</div>
+    </div>
+  );
+}
+
+function ExecutiveCockpit({ orgId }: { orgId: string }) {
+  const today = useQuery({
+    queryKey: ["dashboard", "today", orgId],
+    queryFn: () => api<TodayResp>(`/organization/${orgId}/dashboard/today`),
+  });
+  const teamHealth = useQuery({
+    queryKey: ["team", "health-summary", orgId],
+    queryFn: () => api<TeamHealthResp>(`/organization/${orgId}/team/health-summary`),
+  });
+  const overview = useQuery({
+    queryKey: ["results-overview", orgId],
+    queryFn: () => api<ResultsOverview>(`/organization/${orgId}/results-overview`),
+  });
+  const pendingActions = useQuery({
+    queryKey: ["action-items", "pending", orgId],
+    queryFn: () => api<PendingAction[]>(`/organization/${orgId}/action-items/pending`),
+  });
+
+  const goals = overview.data?.activeCycle?.goals ?? [];
+  const totals = overview.data?.totals;
+
+  return (
+    <FadeIn delay={0.02}>
+      <section className="space-y-3">
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+          <Activity className="h-3.5 w-3.5" /> Painel executivo
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <CockpitCard
+            icon={<Users2 className="h-3.5 w-3.5" />}
+            title="Evolução da equipe"
+            to="/app/team"
+          >
+            {teamHealth.isLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            ) : (
+              <>
+                <div className="flex items-baseline gap-2">
+                  <span className="font-display text-3xl">{teamHealth.data?.score ?? "—"}</span>
+                  <span className="text-xs text-muted-foreground">/100</span>
+                  {!!teamHealth.data?.delta && (
+                    <span
+                      className={
+                        teamHealth.data.delta > 0
+                          ? "text-xs text-emerald-600"
+                          : "text-xs text-rose-600"
+                      }
+                    >
+                      {teamHealth.data.delta > 0 ? "+" : ""}
+                      {teamHealth.data.delta}
+                    </span>
+                  )}
+                </div>
+                {(teamHealth.data?.membersAtRisk ?? 0) > 0 && (
+                  <div className="flex items-center gap-1 text-[11px] text-rose-600">
+                    <AlertTriangle className="h-3 w-3" /> {teamHealth.data?.membersAtRisk}{" "}
+                    colaborador(es) em risco
+                  </div>
+                )}
+              </>
+            )}
+          </CockpitCard>
+
+          <CockpitCard
+            icon={<Target className="h-3.5 w-3.5" />}
+            title="Indicadores"
+            to="/app/indicators"
+          >
+            {overview.isLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            ) : totals ? (
+              <div className="flex items-center gap-3 text-sm">
+                <span className="text-emerald-600">{totals.on_target} na meta</span>
+                <span className="text-amber-600">{totals.warning} atenção</span>
+                <span className="text-rose-600">{totals.off_target} fora</span>
+              </div>
+            ) : (
+              <span className="text-xs text-muted-foreground">Sem indicadores ainda.</span>
+            )}
+          </CockpitCard>
+
+          <CockpitCard
+            icon={<ClipboardList className="h-3.5 w-3.5" />}
+            title="Planos de ação"
+            to="/app/organization/cycles"
+          >
+            {pendingActions.isLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            ) : (pendingActions.data ?? []).length === 0 ? (
+              <span className="text-xs text-muted-foreground">Nenhuma ação pendente.</span>
+            ) : (
+              (pendingActions.data ?? []).slice(0, 3).map((a) => (
+                <div key={a.id} className="text-xs">
+                  <div className="truncate font-medium">{a.title}</div>
+                  <div className="truncate text-muted-foreground">
+                    {a.goal.title}
+                    {a.dueAt ? ` · até ${new Date(a.dueAt).toLocaleDateString("pt-BR")}` : ""}
+                  </div>
+                </div>
+              ))
+            )}
+          </CockpitCard>
+
+          <CockpitCard
+            icon={<ListChecks className="h-3.5 w-3.5" />}
+            title="Atividades pendentes"
+            to="/app"
+          >
+            {today.isLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            ) : (today.data?.items ?? []).length === 0 ? (
+              <span className="text-xs text-muted-foreground">Nada pendente agora.</span>
+            ) : (
+              (today.data?.items ?? []).slice(0, 3).map((it) => (
+                <div key={it.id} className="text-xs">
+                  <div className="truncate font-medium">{it.title}</div>
+                  <div className="truncate text-muted-foreground">{it.subtitle}</div>
+                </div>
+              ))
+            )}
+          </CockpitCard>
+        </div>
+
+        {goals.length > 0 && overview.data?.activeCycle && (
+          <div className="card-elevated p-5">
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                <TrendingUp className="h-3.5 w-3.5" /> Metas e resultados ·{" "}
+                {overview.data.activeCycle.name}
+              </div>
+              <Link
+                to="/app/organization/cycles"
+                className="inline-flex items-center gap-0.5 text-[11px] font-medium text-accent hover:underline"
+              >
+                Abrir metas <ChevronRight className="h-3 w-3" />
+              </Link>
+            </div>
+            <ul className="space-y-2">
+              {goals.slice(0, 5).map((g) => {
+                const gap =
+                  g.targetValue != null && g.currentValue != null
+                    ? g.targetValue - g.currentValue
+                    : null;
+                const projected = overview.data?.activeCycle
+                  ? projectGoal(g, overview.data.activeCycle)
+                  : null;
+                return (
+                  <li
+                    key={g.id}
+                    className="rounded-xl border border-border/60 bg-background p-3 text-sm"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className={`inline-block h-2 w-2 rounded-full ${GOAL_DOT[g.status]}`} />
+                      <span className="font-medium">{g.title}</span>
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-3 text-[11px] text-muted-foreground">
+                      {g.targetValue != null && (
+                        <span>
+                          Meta: <strong className="text-foreground">{g.targetValue}</strong>
+                        </span>
+                      )}
+                      {g.currentValue != null && (
+                        <span>
+                          Atual: <strong className="text-foreground">{g.currentValue}</strong>
+                        </span>
+                      )}
+                      {gap != null && (
+                        <span>
+                          Lacuna:{" "}
+                          <strong className={gap > 0 ? "text-amber-600" : "text-emerald-600"}>
+                            {gap}
+                          </strong>
+                        </span>
+                      )}
+                      {projected != null && g.targetValue != null && (
+                        <span>
+                          Projeção: no ritmo atual, deve fechar em{" "}
+                          <strong
+                            className={
+                              projected >= g.targetValue ? "text-emerald-600" : "text-amber-600"
+                            }
+                          >
+                            {projected}
+                          </strong>
+                        </span>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+      </section>
+    </FadeIn>
+  );
+}
+
 function EvolutionPage() {
   return <EvolutionPageInner />;
 }
 
-function DimensionCard({ icon, label, tone, dim }: { icon: React.ReactNode; label: string; tone: string; dim: Dimension }) {
+function DimensionCard({
+  icon,
+  label,
+  tone,
+  dim,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  tone: string;
+  dim: Dimension;
+}) {
   return (
     <div className="card-elevated p-5">
       <div className={"flex items-center gap-2 text-xs uppercase tracking-widest " + tone}>
@@ -83,7 +411,10 @@ function DimensionCard({ icon, label, tone, dim }: { icon: React.ReactNode; labe
               <span className="text-muted-foreground">{Math.round(p.value * 100)}%</span>
             </div>
             <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-              <div className="h-full rounded-full bg-accent" style={{ width: `${Math.round(p.value * 100)}%` }} />
+              <div
+                className="h-full rounded-full bg-accent"
+                style={{ width: `${Math.round(p.value * 100)}%` }}
+              />
             </div>
             {p.hint && <div className="mt-0.5 text-[10px] text-muted-foreground">{p.hint}</div>}
           </div>
@@ -140,12 +471,24 @@ function EvolutionPageInner() {
               disabled={snapshot.isPending}
               onClick={() => snapshot.mutate()}
             >
-              {snapshot.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              {snapshot.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4" />
+              )}
               Registrar snapshot
             </Button>
           }
         />
       </FadeIn>
+
+      <ExecutiveCockpit orgId={orgId} />
+
+      <div className="border-t border-border/60 pt-6">
+        <div className="mb-4 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+          Evolução do líder
+        </div>
+      </div>
 
       {isLoading && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -169,7 +512,9 @@ function EvolutionPageInner() {
                         <div className="metric-number text-5xl text-accent-gradient">
                           <CountUp value={current.score} />
                         </div>
-                        <div className="text-[10px] uppercase tracking-widest text-muted-foreground">/100</div>
+                        <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                          /100
+                        </div>
                       </>
                     }
                   />
@@ -189,7 +534,9 @@ function EvolutionPageInner() {
                         {delta} vs mês anterior
                       </div>
                     )}
-                    <p className="text-sm leading-relaxed text-foreground/90">{current.diagnostic}</p>
+                    <p className="text-sm leading-relaxed text-foreground/90">
+                      {current.diagnostic}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -235,9 +582,24 @@ function EvolutionPageInner() {
                 </div>
               </div>
               <div className="grid gap-4 md:grid-cols-3">
-                <DimensionCard icon={<Building2 className="h-4 w-4" />} label="Autopercepção" tone="text-sky-500" dim={current.hard} />
-                <DimensionCard icon={<Users2 className="h-4 w-4" />} label="Autorregulação" tone="text-emerald-500" dim={current.soft} />
-                <DimensionCard icon={<Heart className="h-4 w-4" />} label="Escolha Consciente" tone="text-rose-500" dim={current.heart} />
+                <DimensionCard
+                  icon={<Building2 className="h-4 w-4" />}
+                  label="Autopercepção"
+                  tone="text-sky-500"
+                  dim={current.hard}
+                />
+                <DimensionCard
+                  icon={<Users2 className="h-4 w-4" />}
+                  label="Autorregulação"
+                  tone="text-emerald-500"
+                  dim={current.soft}
+                />
+                <DimensionCard
+                  icon={<Heart className="h-4 w-4" />}
+                  label="Escolha Consciente"
+                  tone="text-rose-500"
+                  dim={current.heart}
+                />
               </div>
             </section>
           </FadeIn>
@@ -253,7 +615,8 @@ function EvolutionPageInner() {
               </div>
               {trend.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-border bg-secondary/20 p-6 text-sm text-muted-foreground">
-                  Ainda não há snapshots. Clique em "Registrar snapshot" no fim de cada mês para começar a tendência.
+                  Ainda não há snapshots. Clique em "Registrar snapshot" no fim de cada mês para
+                  começar a tendência.
                 </div>
               ) : (
                 <TrendArea
@@ -316,15 +679,20 @@ function EvolutionPageInner() {
                 </div>
               ) : (timeline.data?.length ?? 0) === 0 ? (
                 <div className="rounded-xl border border-border bg-secondary/20 p-4 text-sm text-muted-foreground">
-                  Ainda sem eventos. Assim que houver snapshots, delegações concluídas, PDIs ou feedbacks, sua trilha começa a se formar.
+                  Ainda sem eventos. Assim que houver snapshots, delegações concluídas, PDIs ou
+                  feedbacks, sua trilha começa a se formar.
                 </div>
               ) : (
                 <ol className="relative space-y-3 border-l border-border pl-5">
                   {timeline.data!.map((ev) => {
                     const Icon =
-                      ev.kind === "snapshot" ? TrendingUp :
-                      ev.kind === "delegation" ? CheckSquare :
-                      ev.kind === "pdi" ? Target : MessageSquare;
+                      ev.kind === "snapshot"
+                        ? TrendingUp
+                        : ev.kind === "delegation"
+                          ? CheckSquare
+                          : ev.kind === "pdi"
+                            ? Target
+                            : MessageSquare;
                     return (
                       <li key={ev.id} className="relative">
                         <span className="absolute -left-[27px] top-1.5 grid h-5 w-5 place-items-center rounded-full border border-border bg-background text-muted-foreground">
@@ -334,7 +702,11 @@ function EvolutionPageInner() {
                           <div className="flex items-start justify-between gap-3">
                             <div className="text-sm font-medium">{ev.title}</div>
                             <div className="shrink-0 text-[10px] uppercase tracking-widest text-muted-foreground">
-                              {new Date(ev.at).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "2-digit" })}
+                              {new Date(ev.at).toLocaleDateString("pt-BR", {
+                                day: "2-digit",
+                                month: "short",
+                                year: "2-digit",
+                              })}
                             </div>
                           </div>
                           {ev.detail && (

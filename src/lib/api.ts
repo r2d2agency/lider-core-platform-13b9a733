@@ -133,6 +133,10 @@ export type Me = {
 };
 
 export const authApi = {
+  forgotPassword: (email: string) =>
+    api<{ ok: true }>("/auth/forgot-password", { method: "POST", body: { email }, auth: false }),
+  resetPassword: (email: string, code: string, newPassword: string) =>
+    api<{ ok: true }>("/auth/reset-password", { method: "POST", body: { email, code, newPassword }, auth: false }),
   login: (email: string, password: string) =>
     api<{ token: string; user: { id: string; email: string; fullName: string | null } }>(
       "/auth/login",

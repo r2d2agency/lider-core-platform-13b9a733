@@ -41,7 +41,13 @@ import { TeamHealthPill } from "@/components/team/TeamHealthPill";
 import { useCurrentOrg } from "@/lib/use-current-org";
 import { api } from "@/lib/api";
 import { VoiceCapture, type VoiceIntent } from "@/components/voice/VoiceCapture";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export const Route = createFileRoute("/_authenticated/app")({
   ssr: false,
@@ -51,22 +57,107 @@ export const Route = createFileRoute("/_authenticated/app")({
 // module = which feature module gates the item. "*" = always show.
 const nav = [
   { to: "/app", label: "Hoje", icon: Home, section: "Consciência", module: "consciencia" },
-  { to: "/app/journey", label: "Jornada", icon: Compass, section: "Consciência", module: "consciencia" },
-  { to: "/app/journey-progress", label: "Progresso C.O.R.E.", icon: Gauge, section: "Consciência", module: "consciencia" },
-  { to: "/app/consciencia", label: "Meu perfil", icon: Brain, section: "Consciência", module: "consciencia" },
-  { to: "/app/team", label: "Minha equipe", icon: Users, section: "Consciência", module: "consciencia" },
-  { to: "/app/consciencia/agenda", label: "Agenda do líder", icon: Calendar, section: "Consciência", module: "consciencia" },
-  { to: "/app/organization", label: "Organização", icon: Building, section: "Organização", module: "organizacao" },
-  { to: "/app/one-on-ones", label: "1:1s", icon: MessageSquare, section: "Organização", module: "organizacao" },
-  { to: "/app/ninebox", label: "9-Box do time", icon: Grid3X3, section: "Organização", module: "organizacao" },
-  { to: "/app/indicators", label: "Indicadores", icon: Target, section: "Resultado", module: "resultado" },
-  { to: "/app/results", label: "Gestão à vista", icon: Activity, section: "Resultado", module: "resultado" },
+  {
+    to: "/app/journey",
+    label: "Jornada",
+    icon: Compass,
+    section: "Consciência",
+    module: "consciencia",
+  },
+  {
+    to: "/app/journey-progress",
+    label: "Progresso C.O.R.E.",
+    icon: Gauge,
+    section: "Consciência",
+    module: "consciencia",
+  },
+  {
+    to: "/app/consciencia",
+    label: "Meu perfil",
+    icon: Brain,
+    section: "Consciência",
+    module: "consciencia",
+  },
+  {
+    to: "/app/team",
+    label: "Minha equipe",
+    icon: Users,
+    section: "Consciência",
+    module: "consciencia",
+  },
+  {
+    to: "/app/ninebox",
+    label: "9-Box do time",
+    icon: Grid3X3,
+    section: "Consciência",
+    module: "consciencia",
+  },
+  {
+    to: "/app/organization",
+    label: "Organização",
+    icon: Building,
+    section: "Organização",
+    module: "organizacao",
+  },
+  {
+    to: "/app/one-on-ones",
+    label: "1:1s",
+    icon: MessageSquare,
+    section: "Organização",
+    module: "organizacao",
+  },
+  {
+    to: "/app/consciencia/agenda",
+    label: "Agenda do líder",
+    icon: Calendar,
+    section: "Organização",
+    module: "organizacao",
+  },
+  {
+    to: "/app/indicators",
+    label: "Indicadores",
+    icon: Target,
+    section: "Resultado",
+    module: "resultado",
+  },
+  {
+    to: "/app/results",
+    label: "Gestão à vista",
+    icon: Activity,
+    section: "Resultado",
+    module: "resultado",
+  },
+  {
+    to: "/app/organization/cycles",
+    label: "Metas do time",
+    icon: CheckCircle2,
+    section: "Resultado",
+    module: "resultado",
+  },
   { to: "/app/evolution", label: "Evolução", icon: Gauge, section: "Evolução", module: "evolucao" },
-  { to: "/app/cycle-closure", label: "Fechamento de ciclo", icon: CheckCircle2, section: "Evolução", module: "evolucao" },
+  {
+    to: "/app/cycle-closure",
+    label: "Fechamento de ciclo",
+    icon: CheckCircle2,
+    section: "Evolução",
+    module: "evolucao",
+  },
   { to: "/app/pdis", label: "PDIs", icon: BookOpen, section: "Evolução", module: "evolucao" },
   { to: "/app/360", label: "360 leve", icon: UsersRound, section: "Evolução", module: "evolucao" },
-  { to: "/app/feedbacks", label: "Feedbacks", icon: Compass, section: "Evolução", module: "evolucao" },
-  { to: "/app/coach", label: "Coach preditivo", icon: Radar, section: "Evolução", module: "evolucao" },
+  {
+    to: "/app/feedbacks",
+    label: "Feedbacks",
+    icon: Compass,
+    section: "Evolução",
+    module: "evolucao",
+  },
+  {
+    to: "/app/coach",
+    label: "Coach preditivo",
+    icon: Radar,
+    section: "Evolução",
+    module: "evolucao",
+  },
   { to: "/app/notes", label: "Notas & reuniões", icon: NotebookPen, section: "Base", module: "*" },
   { to: "/app/ai", label: "Assistente IA", icon: Sparkles, section: "Base", module: "*" },
   { to: "/app/profile", label: "Perfil", icon: UserCircle2, section: "Conta", module: "*" },
@@ -86,10 +177,34 @@ const mobileNav = [
 
 const conscienciaOnlyNav = [
   { to: "/app", label: "Hoje", icon: Home, section: "Consciência", module: "consciencia" },
-  { to: "/app/consciencia", label: "Meu perfil", icon: Brain, section: "Consciência", module: "consciencia" },
-  { to: "/app/journey", label: "Jornada", icon: Compass, section: "Consciência", module: "consciencia" },
-  { to: "/app/team", label: "Minha equipe", icon: Users, section: "Consciência", module: "consciencia" },
-  { to: "/app/consciencia/agenda", label: "Agenda do líder", icon: Calendar, section: "Consciência", module: "consciencia" },
+  {
+    to: "/app/consciencia",
+    label: "Meu perfil",
+    icon: Brain,
+    section: "Consciência",
+    module: "consciencia",
+  },
+  {
+    to: "/app/journey",
+    label: "Jornada",
+    icon: Compass,
+    section: "Consciência",
+    module: "consciencia",
+  },
+  {
+    to: "/app/team",
+    label: "Minha equipe",
+    icon: Users,
+    section: "Consciência",
+    module: "consciencia",
+  },
+  {
+    to: "/app/consciencia/agenda",
+    label: "Agenda do líder",
+    icon: Calendar,
+    section: "Consciência",
+    module: "consciencia",
+  },
   { to: "/app/notes", label: "Notas & reuniões", icon: NotebookPen, section: "Base", module: "*" },
   { to: "/app/ai", label: "Assistente IA", icon: Sparkles, section: "Base", module: "*" },
   { to: "/app/profile", label: "Perfil", icon: UserCircle2, section: "Conta", module: "*" },
@@ -116,11 +231,15 @@ type ShellNavItem = {
 };
 
 function sectionColor(section: string) {
-  return section === "Consciência" ? "var(--pilar-c)"
-    : section === "Organização" ? "var(--pilar-o)"
-    : section === "Resultado" ? "var(--pilar-r)"
-    : section === "Evolução" ? "var(--pilar-e)"
-    : "var(--accent)";
+  return section === "Consciência"
+    ? "var(--pilar-c)"
+    : section === "Organização"
+      ? "var(--pilar-o)"
+      : section === "Resultado"
+        ? "var(--pilar-r)"
+        : section === "Evolução"
+          ? "var(--pilar-e)"
+          : "var(--accent)";
 }
 
 const productModuleTabs = [
@@ -132,27 +251,39 @@ const productModuleTabs = [
 
 function isModuleActive(pathname: string, module: (typeof productModuleTabs)[number]["module"]) {
   if (module === "consciencia") {
-    return pathname === "/app"
-      || pathname.startsWith("/app/consciencia")
-      || pathname.startsWith("/app/journey")
-      || pathname.startsWith("/app/team");
+    return (
+      pathname === "/app" ||
+      (pathname.startsWith("/app/consciencia") &&
+        !pathname.startsWith("/app/consciencia/agenda")) ||
+      pathname.startsWith("/app/journey") ||
+      pathname.startsWith("/app/team") ||
+      pathname.startsWith("/app/ninebox")
+    );
   }
   if (module === "organizacao") {
-    return pathname.startsWith("/app/organization")
-      || pathname.startsWith("/app/one-on-ones")
-      || pathname.startsWith("/app/ninebox");
+    return (
+      (pathname.startsWith("/app/organization") &&
+        !pathname.startsWith("/app/organization/cycles")) ||
+      pathname.startsWith("/app/one-on-ones") ||
+      pathname.startsWith("/app/consciencia/agenda")
+    );
   }
   if (module === "resultado") {
-    return pathname.startsWith("/app/indicators")
-      || pathname.startsWith("/app/results");
+    return (
+      pathname.startsWith("/app/indicators") ||
+      pathname.startsWith("/app/results") ||
+      pathname.startsWith("/app/organization/cycles")
+    );
   }
   if (module === "evolucao") {
-    return pathname.startsWith("/app/evolution")
-      || pathname.startsWith("/app/cycle-closure")
-      || pathname.startsWith("/app/pdis")
-      || pathname.startsWith("/app/360")
-      || pathname.startsWith("/app/feedbacks")
-      || pathname.startsWith("/app/coach");
+    return (
+      pathname.startsWith("/app/evolution") ||
+      pathname.startsWith("/app/cycle-closure") ||
+      pathname.startsWith("/app/pdis") ||
+      pathname.startsWith("/app/360") ||
+      pathname.startsWith("/app/feedbacks") ||
+      pathname.startsWith("/app/coach")
+    );
   }
   return false;
 }
@@ -197,10 +328,13 @@ function AppShell() {
   const isModuleAllowed = (mod: string) =>
     mod === "*" || !enabledModules || enabledModules.has(mod);
 
-  const conscienciaOnly = !!enabledModules && enabledModules.size === 1 && enabledModules.has("consciencia");
+  const conscienciaOnly =
+    !!enabledModules && enabledModules.size === 1 && enabledModules.has("consciencia");
   const baseNav = conscienciaOnly ? conscienciaOnlyNav : nav;
   const baseMobileNav = conscienciaOnly ? conscienciaOnlyMobileNav : mobileNav;
-  const quickActionTo = conscienciaOnly ? "/app/consciencia/agenda" : "/app/organization/delegations";
+  const quickActionTo = conscienciaOnly
+    ? "/app/consciencia/agenda"
+    : "/app/organization/delegations";
 
   const visibleNav = baseNav.filter((n) => isModuleAllowed(n.module));
   const visibleMobileNav = baseMobileNav.filter((n) => isModuleAllowed(n.module));
@@ -296,8 +430,7 @@ function AppShell() {
     return pathname === to || pathname.startsWith(to + "/");
   };
 
-  const currentLabel =
-    visibleNav.find((n) => isActiveRoute(n.to))?.label ?? "Sala de liderança";
+  const currentLabel = visibleNav.find((n) => isActiveRoute(n.to))?.label ?? "Sala de liderança";
   const currentNavItem = visibleNav.find((n) => isActiveRoute(n.to)) ?? null;
   const currentSection = currentNavItem?.section ?? "Navegação";
   const sectionTabs = productModuleTabs.map((tab) => ({
@@ -362,7 +495,9 @@ function AppShell() {
                         title={collapsed ? label : undefined}
                         style={{
                           color: active ? pilarColor : undefined,
-                          backgroundColor: active ? `color-mix(in oklab, ${pilarColor} 10%, transparent)` : undefined,
+                          backgroundColor: active
+                            ? `color-mix(in oklab, ${pilarColor} 10%, transparent)`
+                            : undefined,
                         }}
                         className={
                           "flex items-center rounded-lg text-sm transition-colors " +
@@ -373,9 +508,9 @@ function AppShell() {
                             : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground")
                         }
                       >
-                        <Icon 
-                          className="h-4 w-4 shrink-0" 
-                          strokeWidth={active ? 2.5 : 1.75} 
+                        <Icon
+                          className="h-4 w-4 shrink-0"
+                          strokeWidth={active ? 2.5 : 1.75}
                           style={{ color: active ? pilarColor : undefined }}
                         />
 
@@ -422,7 +557,13 @@ function AppShell() {
               (collapsed ? "justify-center px-0" : "")
             }
           >
-            {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <><PanelLeftClose className="h-4 w-4" /> Recolher menu</>}
+            {collapsed ? (
+              <PanelLeftOpen className="h-4 w-4" />
+            ) : (
+              <>
+                <PanelLeftClose className="h-4 w-4" /> Recolher menu
+              </>
+            )}
           </button>
         </div>
       </aside>
@@ -469,7 +610,10 @@ function AppShell() {
             )}
             <TeamHealthPill orgId={orgId} />
             <NotificationBell />
-            <div className="grid h-9 w-9 place-items-center overflow-hidden rounded-full bg-secondary text-sm font-medium ring-2" style={{ borderColor: 'var(--pilar-c)' }}>
+            <div
+              className="grid h-9 w-9 place-items-center overflow-hidden rounded-full bg-secondary text-sm font-medium ring-2"
+              style={{ borderColor: "var(--pilar-c)" }}
+            >
               <Logo variant="mark" className="h-8 w-8 rounded-full" />
             </div>
           </div>
@@ -488,9 +632,7 @@ function AppShell() {
                 }}
                 className={
                   "inline-flex shrink-0 items-center rounded-full border px-3 py-1.5 text-xs font-medium transition-colors " +
-                  (tab.active
-                    ? "font-semibold shadow-sm"
-                    : "hover:brightness-105")
+                  (tab.active ? "font-semibold shadow-sm" : "hover:brightness-105")
                 }
               >
                 {tab.section}
@@ -548,7 +690,9 @@ function AppShell() {
                   variant="panel"
                 />
                 <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-                  Exemplos: <em>"Anotar que a Ana pediu mais autonomia"</em> · <em>"Dar feedback positivo à Ana"</em> · <em>"Delegar ao João o relatório até sexta"</em>.
+                  Exemplos: <em>"Anotar que a Ana pediu mais autonomia"</em> ·{" "}
+                  <em>"Dar feedback positivo à Ana"</em> ·{" "}
+                  <em>"Delegar ao João o relatório até sexta"</em>.
                 </p>
               </div>
             )}
@@ -557,10 +701,7 @@ function AppShell() {
 
         {/* Bottom navigation (mobile) */}
         <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-background/95 backdrop-blur md:hidden">
-          <ul
-            className="mx-auto flex max-w-3xl items-center"
-            style={{ width: "100%" }}
-          >
+          <ul className="mx-auto flex max-w-3xl items-center" style={{ width: "100%" }}>
             {visibleMobileNav.map(({ to, label, icon: Icon }) => {
               const active = isActiveRoute(to);
               return (
@@ -573,7 +714,12 @@ function AppShell() {
                       (active ? "text-accent" : "text-muted-foreground")
                     }
                   >
-                    <span className={"grid h-9 w-9 place-items-center rounded-full transition-colors " + (active ? "bg-accent/10" : "")}>
+                    <span
+                      className={
+                        "grid h-9 w-9 place-items-center rounded-full transition-colors " +
+                        (active ? "bg-accent/10" : "")
+                      }
+                    >
                       <Icon className="h-5 w-5" strokeWidth={active ? 2.25 : 1.75} />
                     </span>
                     {label}

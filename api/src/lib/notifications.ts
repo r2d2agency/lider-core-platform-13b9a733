@@ -7,6 +7,7 @@
 //  - Meta Cloud API: https://developers.facebook.com/docs/whatsapp/cloud-api
 
 import { prisma } from "../prisma.js";
+import nodemailer from "nodemailer";
 
 // ------- Config loader -------
 export interface NotificationsConfig {
@@ -348,4 +349,25 @@ export async function notifyInApp(input: {
     },
   });
   return { id: log.id };
+}
+
+export async function sendEmail(input: { to: string; subject: string; text: string; html?: string }): Promise<void> {
+  const [host, portValue, username, password, fromEmail, fromName] = await Promise.all(
+    ["host", "port", "username", "password", "from_email", "from_name"].map((key) => getSetting("smtp", key)),
+  );
+  if (!host || !fromEmail) throw new NotificationError("SMTP não configurado", 412, null);
+  const port = Number(portValue || 587);
+  const transport = nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465,
+    auth: username ? { user: username, pass: password || "" } : undefined,
+  });
+  await transport.sendMail({
+    from: fromName ? `"${fromName.replace(/["\r\n]/g, "")}" <${fromEmail}>` : fromEmail,
+    to: input.to,
+    subject: input.subject,
+    text: input.text,
+    html: input.html,
+  });
 }
