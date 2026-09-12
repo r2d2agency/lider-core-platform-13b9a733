@@ -34,6 +34,7 @@ import {
   Route as RouteIcon,
   GitBranch,
   History,
+  Rocket,
   type LucideIcon,
 } from "lucide-react";
 
@@ -93,6 +94,7 @@ const navSections: NavSection[] = [
       { to: "/admin/logs", label: "Logs do sistema", icon: FileText },
       { to: "/admin/methodology", label: "Metodologia (legado)", icon: GitBranch },
       { to: "/admin/help", label: "Documentação", icon: HelpCircle },
+      { to: "/admin/roadmap", label: "Changelog & Roadmap", icon: Rocket },
     ],
   },
 ];
@@ -127,7 +129,10 @@ export function AdminShell() {
     <div className="neo-admin min-h-screen">
       <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
       <div className="flex min-h-screen">
-        <aside className="hidden w-72 shrink-0 flex-col border-r neo-hairline md:flex" style={{ background: "var(--neo-cream)" }}>
+        <aside
+          className="hidden w-72 shrink-0 flex-col border-r neo-hairline md:flex"
+          style={{ background: "var(--neo-cream)" }}
+        >
           <div className="flex items-center gap-3 border-b neo-hairline px-6 py-5">
             <Logo className="h-6 w-auto max-w-[130px]" />
             <span className="neo-eyebrow">Neo · Admin</span>
@@ -159,7 +164,10 @@ export function AdminShell() {
                           : "text-[color:var(--neo-muted)] hover:bg-white/60 hover:text-[color:var(--neo-ink)]"
                       }`}
                     >
-                      <item.icon className={`h-4 w-4 ${active ? "text-[color:var(--neo-accent)]" : ""}`} strokeWidth={1.4} />
+                      <item.icon
+                        className={`h-4 w-4 ${active ? "text-[color:var(--neo-accent)]" : ""}`}
+                        strokeWidth={1.4}
+                      />
                       <span className="truncate">{item.label}</span>
                     </Link>
                   );
@@ -226,7 +234,9 @@ export function AdminPageHeader({
         <div className="neo-eyebrow">{eyebrow ?? "Painel Neo"}</div>
         <h1 className="mt-2 text-4xl md:text-5xl">{title}</h1>
         {description && (
-          <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-[color:var(--neo-muted)]">{description}</p>
+          <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-[color:var(--neo-muted)]">
+            {description}
+          </p>
         )}
       </div>
       {action}

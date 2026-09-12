@@ -701,6 +701,42 @@ model AppRelease {
   @@map("apps_releases")
 }
 
+// ============================================================
+// Administração e documentação (item 8 do PDF de reorganização)
+// ============================================================
+enum ChangelogEntryType {
+  fix
+  feature
+  change
+}
+
+// Changelog operacional: o que foi corrigido, implementado ou modificado.
+// Distinto do AppRelease (que versiona builds instaláveis).
+model ChangelogEntry {
+  id          String             @id @default(uuid()) @db.Uuid
+  type        ChangelogEntryType
+  title       String
+  description String?
+  createdBy   String?            @map("created_by") @db.Uuid
+  publishedAt DateTime           @default(now()) @map("published_at")
+
+  @@index([publishedAt])
+  @@map("changelog_entries")
+}
+
+// Documentação técnica, processos e roadmap — conteúdo em markdown,
+// identificado por slug fixo ("technical", "processes", "roadmap").
+model PlatformDocument {
+  id              String   @id @default(uuid()) @db.Uuid
+  slug            String   @unique
+  title           String
+  contentMarkdown String?  @map("content_markdown")
+  updatedBy       String?  @map("updated_by") @db.Uuid
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("platform_documents")
+}
+
 model AuditLog {
   id          String   @id @default(uuid()) @db.Uuid
   actorUserId String?  @map("actor_user_id") @db.Uuid

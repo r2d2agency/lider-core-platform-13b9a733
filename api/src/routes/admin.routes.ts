@@ -107,7 +107,14 @@ adminRouter.get("/users", async (req, res) => {
 });
 
 const promoteSchema = z.object({
-  role: z.enum(["super_admin", "neo_admin", "franchise_owner", "hr_admin", "leader", "collaborator"]),
+  role: z.enum([
+    "super_admin",
+    "neo_admin",
+    "franchise_owner",
+    "hr_admin",
+    "leader",
+    "collaborator",
+  ]),
 });
 
 adminRouter.post("/users/:id/roles", async (req, res) => {
@@ -174,7 +181,10 @@ adminRouter.get("/franchises", async (_req, res) => {
 
 const franchiseCreateSchema = z.object({
   name: z.string().min(1),
-  slug: z.string().min(1).regex(/^[a-z0-9-]+$/),
+  slug: z
+    .string()
+    .min(1)
+    .regex(/^[a-z0-9-]+$/),
   cnpj: z.string().optional().nullable(),
   ownerUserId: z.string().uuid().optional().nullable(),
   planId: z.string().uuid().optional().nullable(),
@@ -269,7 +279,14 @@ adminRouter.get("/organizations", async (req, res) => {
   const orgs = await prisma.organization.findMany({
     where: {
       AND: [
-        q ? { OR: [{ name: { contains: q, mode: "insensitive" } }, { slug: { contains: q, mode: "insensitive" } }] } : {},
+        q
+          ? {
+              OR: [
+                { name: { contains: q, mode: "insensitive" } },
+                { slug: { contains: q, mode: "insensitive" } },
+              ],
+            }
+          : {},
         franchiseId ? { franchiseId } : {},
       ],
     },
@@ -284,7 +301,10 @@ adminRouter.get("/organizations", async (req, res) => {
 
 const orgCreateSchema = z.object({
   name: z.string().min(1),
-  slug: z.string().min(1).regex(/^[a-z0-9-]+$/),
+  slug: z
+    .string()
+    .min(1)
+    .regex(/^[a-z0-9-]+$/),
   cnpj: z.string().optional().nullable(),
   franchiseId: z.string().uuid().optional().nullable(),
   plan: z.enum(["essencial", "profissional", "enterprise"]).optional(),
@@ -317,9 +337,12 @@ adminRouter.post("/organizations", async (req, res) => {
 });
 
 adminRouter.patch("/organizations/:id", async (req, res) => {
-  const parsed = orgCreateSchema.partial().extend({
-    status: z.enum(["trial", "active", "suspended", "canceled"]).optional(),
-  }).safeParse(req.body);
+  const parsed = orgCreateSchema
+    .partial()
+    .extend({
+      status: z.enum(["trial", "active", "suspended", "canceled"]).optional(),
+    })
+    .safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const org = await prisma.organization.update({ where: { id: req.params.id }, data: parsed.data });
   res.json(org);
@@ -340,7 +363,10 @@ adminRouter.get("/plans", async (_req, res) => {
 
 const planSchema = z.object({
   name: z.string().min(1),
-  slug: z.string().min(1).regex(/^[a-z0-9-]+$/),
+  slug: z
+    .string()
+    .min(1)
+    .regex(/^[a-z0-9-]+$/),
   description: z.string().optional().nullable(),
   priceMonthly: z.number().int().min(0).default(0),
   priceYearly: z.number().int().min(0).default(0),
@@ -368,7 +394,10 @@ adminRouter.post("/plans", async (req, res) => {
 adminRouter.patch("/plans/:id", async (req, res) => {
   const parsed = planSchema.partial().safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-  const p = await prisma.plan.update({ where: { id: req.params.id }, data: normalizePlanData(parsed.data) });
+  const p = await prisma.plan.update({
+    where: { id: req.params.id },
+    data: normalizePlanData(parsed.data),
+  });
   res.json(p);
 });
 
@@ -404,8 +433,12 @@ adminRouter.post("/subscriptions", async (req, res) => {
   const s = await prisma.subscription.create({
     data: {
       ...parsed.data,
-      currentPeriodStart: parsed.data.currentPeriodStart ? new Date(parsed.data.currentPeriodStart) : null,
-      currentPeriodEnd: parsed.data.currentPeriodEnd ? new Date(parsed.data.currentPeriodEnd) : null,
+      currentPeriodStart: parsed.data.currentPeriodStart
+        ? new Date(parsed.data.currentPeriodStart)
+        : null,
+      currentPeriodEnd: parsed.data.currentPeriodEnd
+        ? new Date(parsed.data.currentPeriodEnd)
+        : null,
     },
   });
   res.status(201).json(s);
@@ -418,8 +451,12 @@ adminRouter.patch("/subscriptions/:id", async (req, res) => {
     where: { id: req.params.id },
     data: {
       ...parsed.data,
-      currentPeriodStart: parsed.data.currentPeriodStart ? new Date(parsed.data.currentPeriodStart) : undefined,
-      currentPeriodEnd: parsed.data.currentPeriodEnd ? new Date(parsed.data.currentPeriodEnd) : undefined,
+      currentPeriodStart: parsed.data.currentPeriodStart
+        ? new Date(parsed.data.currentPeriodStart)
+        : undefined,
+      currentPeriodEnd: parsed.data.currentPeriodEnd
+        ? new Date(parsed.data.currentPeriodEnd)
+        : undefined,
     },
   });
   res.json(s);
@@ -593,10 +630,18 @@ const docSchema = z.object({
 
 adminRouter.get("/methodology-doc", async (_req, res) => {
   const doc = await prisma.methodologyDoc.findUnique({ where: { id: "singleton" } });
-  res.json(doc ?? {
-    id: "singleton", mission: null, vision: null, manifesto: null,
-    principles: [], leaderProfile: null, aiSystemPrompt: null, pillars: null,
-  });
+  res.json(
+    doc ?? {
+      id: "singleton",
+      mission: null,
+      vision: null,
+      manifesto: null,
+      principles: [],
+      leaderProfile: null,
+      aiSystemPrompt: null,
+      pillars: null,
+    },
+  );
 });
 
 adminRouter.put("/methodology-doc", async (req, res) => {
@@ -631,6 +676,83 @@ adminRouter.post("/apps", async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const r = await prisma.appRelease.create({ data: parsed.data });
   res.status(201).json(r);
+});
+
+// ============================================================
+// Changelog operacional — o que foi corrigido, implementado ou modificado
+// (item 8 do PDF de reorganização; distinto do release de apps acima)
+// ============================================================
+adminRouter.get("/changelog", async (_req, res) => {
+  const entries = await prisma.changelogEntry.findMany({
+    orderBy: { publishedAt: "desc" },
+    take: 200,
+  });
+  res.json(entries);
+});
+
+const changelogSchema = z.object({
+  type: z.enum(["fix", "feature", "change"]),
+  title: z.string().min(2),
+  description: z.string().optional().nullable(),
+});
+
+adminRouter.post("/changelog", async (req, res) => {
+  const parsed = changelogSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const entry = await prisma.changelogEntry.create({
+    data: { ...parsed.data, createdBy: req.userId! },
+  });
+  res.status(201).json(entry);
+});
+
+adminRouter.delete("/changelog/:id", async (req, res) => {
+  await prisma.changelogEntry.delete({ where: { id: req.params.id } }).catch(() => null);
+  res.status(204).end();
+});
+
+// ============================================================
+// Documentação técnica, processos e roadmap (markdown por slug fixo)
+// ============================================================
+adminRouter.get("/docs/:slug", async (req, res) => {
+  const doc = await prisma.platformDocument.findUnique({ where: { slug: req.params.slug } });
+  res.json(doc ?? { slug: req.params.slug, title: "", contentMarkdown: "" });
+});
+
+const platformDocSchema = z.object({
+  title: z.string().min(1),
+  contentMarkdown: z.string().optional().nullable(),
+});
+
+adminRouter.put("/docs/:slug", async (req, res) => {
+  const parsed = platformDocSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const saved = await prisma.platformDocument.upsert({
+    where: { slug: req.params.slug },
+    update: {
+      title: parsed.data.title,
+      contentMarkdown: parsed.data.contentMarkdown ?? null,
+      updatedBy: req.userId!,
+    },
+    create: {
+      slug: req.params.slug,
+      title: parsed.data.title,
+      contentMarkdown: parsed.data.contentMarkdown ?? null,
+      updatedBy: req.userId!,
+    },
+  });
+  res.json(saved);
+});
+
+// ============================================================
+// Capacidade da plataforma — usuários únicos vs. capacidade atual
+// ============================================================
+adminRouter.get("/capacity", async (_req, res) => {
+  const [uniqueUsers, organizations, activeOrganizations] = await Promise.all([
+    prisma.user.count(),
+    prisma.organization.count(),
+    prisma.organization.count({ where: { status: "active" } }),
+  ]);
+  res.json({ uniqueUsers, organizations, activeOrganizations, capacityLimit: 100 });
 });
 
 // ============================================================

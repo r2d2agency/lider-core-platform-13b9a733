@@ -58,6 +58,7 @@ import { Route as AuthenticatedAdminUsersRouteImport } from './routes/_authentic
 import { Route as AuthenticatedAdminSubscriptionsRouteImport } from './routes/_authenticated/admin.subscriptions'
 import { Route as AuthenticatedAdminSignupPlansRouteImport } from './routes/_authenticated/admin.signup-plans'
 import { Route as AuthenticatedAdminSettingsRouteImport } from './routes/_authenticated/admin.settings'
+import { Route as AuthenticatedAdminRoadmapRouteImport } from './routes/_authenticated/admin.roadmap'
 import { Route as AuthenticatedAdminPlansRouteImport } from './routes/_authenticated/admin.plans'
 import { Route as AuthenticatedAdminPermissionsRouteImport } from './routes/_authenticated/admin.permissions'
 import { Route as AuthenticatedAdminOrganizationsRouteImport } from './routes/_authenticated/admin.organizations'
@@ -374,6 +375,12 @@ const AuthenticatedAdminSettingsRoute =
   AuthenticatedAdminSettingsRouteImport.update({
     id: '/settings',
     path: '/settings',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
+const AuthenticatedAdminRoadmapRoute =
+  AuthenticatedAdminRoadmapRouteImport.update({
+    id: '/roadmap',
+    path: '/roadmap',
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
 const AuthenticatedAdminPlansRoute = AuthenticatedAdminPlansRouteImport.update({
@@ -708,6 +715,7 @@ export interface FileRoutesByFullPath {
   '/admin/organizations': typeof AuthenticatedAdminOrganizationsRoute
   '/admin/permissions': typeof AuthenticatedAdminPermissionsRoute
   '/admin/plans': typeof AuthenticatedAdminPlansRoute
+  '/admin/roadmap': typeof AuthenticatedAdminRoadmapRoute
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/signup-plans': typeof AuthenticatedAdminSignupPlansRoute
   '/admin/subscriptions': typeof AuthenticatedAdminSubscriptionsRoute
@@ -805,6 +813,7 @@ export interface FileRoutesByTo {
   '/admin/organizations': typeof AuthenticatedAdminOrganizationsRoute
   '/admin/permissions': typeof AuthenticatedAdminPermissionsRoute
   '/admin/plans': typeof AuthenticatedAdminPlansRoute
+  '/admin/roadmap': typeof AuthenticatedAdminRoadmapRoute
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/signup-plans': typeof AuthenticatedAdminSignupPlansRoute
   '/admin/subscriptions': typeof AuthenticatedAdminSubscriptionsRoute
@@ -903,6 +912,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/organizations': typeof AuthenticatedAdminOrganizationsRoute
   '/_authenticated/admin/permissions': typeof AuthenticatedAdminPermissionsRoute
   '/_authenticated/admin/plans': typeof AuthenticatedAdminPlansRoute
+  '/_authenticated/admin/roadmap': typeof AuthenticatedAdminRoadmapRoute
   '/_authenticated/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/_authenticated/admin/signup-plans': typeof AuthenticatedAdminSignupPlansRoute
   '/_authenticated/admin/subscriptions': typeof AuthenticatedAdminSubscriptionsRoute
@@ -1006,6 +1016,7 @@ export interface FileRouteTypes {
     | '/admin/organizations'
     | '/admin/permissions'
     | '/admin/plans'
+    | '/admin/roadmap'
     | '/admin/settings'
     | '/admin/signup-plans'
     | '/admin/subscriptions'
@@ -1103,6 +1114,7 @@ export interface FileRouteTypes {
     | '/admin/organizations'
     | '/admin/permissions'
     | '/admin/plans'
+    | '/admin/roadmap'
     | '/admin/settings'
     | '/admin/signup-plans'
     | '/admin/subscriptions'
@@ -1200,6 +1212,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/organizations'
     | '/_authenticated/admin/permissions'
     | '/_authenticated/admin/plans'
+    | '/_authenticated/admin/roadmap'
     | '/_authenticated/admin/settings'
     | '/_authenticated/admin/signup-plans'
     | '/_authenticated/admin/subscriptions'
@@ -1626,6 +1639,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminSettingsRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
+    '/_authenticated/admin/roadmap': {
+      id: '/_authenticated/admin/roadmap'
+      path: '/roadmap'
+      fullPath: '/admin/roadmap'
+      preLoaderRoute: typeof AuthenticatedAdminRoadmapRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
     '/_authenticated/admin/plans': {
       id: '/_authenticated/admin/plans'
       path: '/plans'
@@ -2042,6 +2062,7 @@ interface AuthenticatedAdminRouteChildren {
   AuthenticatedAdminOrganizationsRoute: typeof AuthenticatedAdminOrganizationsRoute
   AuthenticatedAdminPermissionsRoute: typeof AuthenticatedAdminPermissionsRoute
   AuthenticatedAdminPlansRoute: typeof AuthenticatedAdminPlansRoute
+  AuthenticatedAdminRoadmapRoute: typeof AuthenticatedAdminRoadmapRoute
   AuthenticatedAdminSettingsRoute: typeof AuthenticatedAdminSettingsRoute
   AuthenticatedAdminSignupPlansRoute: typeof AuthenticatedAdminSignupPlansRoute
   AuthenticatedAdminSubscriptionsRoute: typeof AuthenticatedAdminSubscriptionsRoute
@@ -2077,6 +2098,7 @@ const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
   AuthenticatedAdminOrganizationsRoute: AuthenticatedAdminOrganizationsRoute,
   AuthenticatedAdminPermissionsRoute: AuthenticatedAdminPermissionsRoute,
   AuthenticatedAdminPlansRoute: AuthenticatedAdminPlansRoute,
+  AuthenticatedAdminRoadmapRoute: AuthenticatedAdminRoadmapRoute,
   AuthenticatedAdminSettingsRoute: AuthenticatedAdminSettingsRoute,
   AuthenticatedAdminSignupPlansRoute: AuthenticatedAdminSignupPlansRoute,
   AuthenticatedAdminSubscriptionsRoute: AuthenticatedAdminSubscriptionsRoute,
