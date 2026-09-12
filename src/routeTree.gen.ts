@@ -14,6 +14,8 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PaTokenRouteImport } from './routes/pa.$token'
 import { Route as PTokenRouteImport } from './routes/p.$token'
+import { Route as Nr1TokenRouteImport } from './routes/nr1.$token'
+import { Route as Nr1DenunciaTokenRouteImport } from './routes/nr1-denuncia.$token'
 import { Route as AuthenticatedFranchiseRouteImport } from './routes/_authenticated/franchise'
 import { Route as AuthenticatedCompanyRouteImport } from './routes/_authenticated/company'
 import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/app'
@@ -37,6 +39,7 @@ import { Route as AuthenticatedAppProfileRouteImport } from './routes/_authentic
 import { Route as AuthenticatedAppPdisRouteImport } from './routes/_authenticated/app.pdis'
 import { Route as AuthenticatedAppOrganizationRouteImport } from './routes/_authenticated/app.organization'
 import { Route as AuthenticatedAppOneOnOnesRouteImport } from './routes/_authenticated/app.one-on-ones'
+import { Route as AuthenticatedAppNr1RouteImport } from './routes/_authenticated/app.nr1'
 import { Route as AuthenticatedAppNotificationsRouteImport } from './routes/_authenticated/app.notifications'
 import { Route as AuthenticatedAppNotesRouteImport } from './routes/_authenticated/app.notes'
 import { Route as AuthenticatedAppNineboxRouteImport } from './routes/_authenticated/app.ninebox'
@@ -129,6 +132,16 @@ const PaTokenRoute = PaTokenRouteImport.update({
 const PTokenRoute = PTokenRouteImport.update({
   id: '/p/$token',
   path: '/p/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const Nr1TokenRoute = Nr1TokenRouteImport.update({
+  id: '/nr1/$token',
+  path: '/nr1/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const Nr1DenunciaTokenRoute = Nr1DenunciaTokenRouteImport.update({
+  id: '/nr1-denuncia/$token',
+  path: '/nr1-denuncia/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedFranchiseRoute = AuthenticatedFranchiseRouteImport.update({
@@ -258,6 +271,11 @@ const AuthenticatedAppOneOnOnesRoute =
     path: '/one-on-ones',
     getParentRoute: () => AuthenticatedAppRoute,
   } as any)
+const AuthenticatedAppNr1Route = AuthenticatedAppNr1RouteImport.update({
+  id: '/nr1',
+  path: '/nr1',
+  getParentRoute: () => AuthenticatedAppRoute,
+} as any)
 const AuthenticatedAppNotificationsRoute =
   AuthenticatedAppNotificationsRouteImport.update({
     id: '/notifications',
@@ -666,6 +684,8 @@ export interface FileRoutesByFullPath {
   '/app': typeof AuthenticatedAppRouteWithChildren
   '/company': typeof AuthenticatedCompanyRouteWithChildren
   '/franchise': typeof AuthenticatedFranchiseRouteWithChildren
+  '/nr1-denuncia/$token': typeof Nr1DenunciaTokenRoute
+  '/nr1/$token': typeof Nr1TokenRoute
   '/p/$token': typeof PTokenRoute
   '/pa/$token': typeof PaTokenRoute
   '/admin/ai': typeof AuthenticatedAdminAiRoute
@@ -706,6 +726,7 @@ export interface FileRoutesByFullPath {
   '/app/ninebox': typeof AuthenticatedAppNineboxRoute
   '/app/notes': typeof AuthenticatedAppNotesRoute
   '/app/notifications': typeof AuthenticatedAppNotificationsRoute
+  '/app/nr1': typeof AuthenticatedAppNr1Route
   '/app/one-on-ones': typeof AuthenticatedAppOneOnOnesRoute
   '/app/organization': typeof AuthenticatedAppOrganizationRouteWithChildren
   '/app/pdis': typeof AuthenticatedAppPdisRoute
@@ -760,6 +781,8 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/nr1-denuncia/$token': typeof Nr1DenunciaTokenRoute
+  '/nr1/$token': typeof Nr1TokenRoute
   '/p/$token': typeof PTokenRoute
   '/pa/$token': typeof PaTokenRoute
   '/admin/ai': typeof AuthenticatedAdminAiRoute
@@ -799,6 +822,7 @@ export interface FileRoutesByTo {
   '/app/ninebox': typeof AuthenticatedAppNineboxRoute
   '/app/notes': typeof AuthenticatedAppNotesRoute
   '/app/notifications': typeof AuthenticatedAppNotificationsRoute
+  '/app/nr1': typeof AuthenticatedAppNr1Route
   '/app/one-on-ones': typeof AuthenticatedAppOneOnOnesRoute
   '/app/pdis': typeof AuthenticatedAppPdisRoute
   '/app/profile': typeof AuthenticatedAppProfileRoute
@@ -855,6 +879,8 @@ export interface FileRoutesById {
   '/_authenticated/app': typeof AuthenticatedAppRouteWithChildren
   '/_authenticated/company': typeof AuthenticatedCompanyRouteWithChildren
   '/_authenticated/franchise': typeof AuthenticatedFranchiseRouteWithChildren
+  '/nr1-denuncia/$token': typeof Nr1DenunciaTokenRoute
+  '/nr1/$token': typeof Nr1TokenRoute
   '/p/$token': typeof PTokenRoute
   '/pa/$token': typeof PaTokenRoute
   '/_authenticated/admin/ai': typeof AuthenticatedAdminAiRoute
@@ -895,6 +921,7 @@ export interface FileRoutesById {
   '/_authenticated/app/ninebox': typeof AuthenticatedAppNineboxRoute
   '/_authenticated/app/notes': typeof AuthenticatedAppNotesRoute
   '/_authenticated/app/notifications': typeof AuthenticatedAppNotificationsRoute
+  '/_authenticated/app/nr1': typeof AuthenticatedAppNr1Route
   '/_authenticated/app/one-on-ones': typeof AuthenticatedAppOneOnOnesRoute
   '/_authenticated/app/organization': typeof AuthenticatedAppOrganizationRouteWithChildren
   '/_authenticated/app/pdis': typeof AuthenticatedAppPdisRoute
@@ -955,6 +982,8 @@ export interface FileRouteTypes {
     | '/app'
     | '/company'
     | '/franchise'
+    | '/nr1-denuncia/$token'
+    | '/nr1/$token'
     | '/p/$token'
     | '/pa/$token'
     | '/admin/ai'
@@ -995,6 +1024,7 @@ export interface FileRouteTypes {
     | '/app/ninebox'
     | '/app/notes'
     | '/app/notifications'
+    | '/app/nr1'
     | '/app/one-on-ones'
     | '/app/organization'
     | '/app/pdis'
@@ -1049,6 +1079,8 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
+    | '/nr1-denuncia/$token'
+    | '/nr1/$token'
     | '/p/$token'
     | '/pa/$token'
     | '/admin/ai'
@@ -1088,6 +1120,7 @@ export interface FileRouteTypes {
     | '/app/ninebox'
     | '/app/notes'
     | '/app/notifications'
+    | '/app/nr1'
     | '/app/one-on-ones'
     | '/app/pdis'
     | '/app/profile'
@@ -1143,6 +1176,8 @@ export interface FileRouteTypes {
     | '/_authenticated/app'
     | '/_authenticated/company'
     | '/_authenticated/franchise'
+    | '/nr1-denuncia/$token'
+    | '/nr1/$token'
     | '/p/$token'
     | '/pa/$token'
     | '/_authenticated/admin/ai'
@@ -1183,6 +1218,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/ninebox'
     | '/_authenticated/app/notes'
     | '/_authenticated/app/notifications'
+    | '/_authenticated/app/nr1'
     | '/_authenticated/app/one-on-ones'
     | '/_authenticated/app/organization'
     | '/_authenticated/app/pdis'
@@ -1239,6 +1275,8 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  Nr1DenunciaTokenRoute: typeof Nr1DenunciaTokenRoute
+  Nr1TokenRoute: typeof Nr1TokenRoute
   PTokenRoute: typeof PTokenRoute
   PaTokenRoute: typeof PaTokenRoute
 }
@@ -1278,6 +1316,20 @@ declare module '@tanstack/react-router' {
       path: '/p/$token'
       fullPath: '/p/$token'
       preLoaderRoute: typeof PTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/nr1/$token': {
+      id: '/nr1/$token'
+      path: '/nr1/$token'
+      fullPath: '/nr1/$token'
+      preLoaderRoute: typeof Nr1TokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/nr1-denuncia/$token': {
+      id: '/nr1-denuncia/$token'
+      path: '/nr1-denuncia/$token'
+      fullPath: '/nr1-denuncia/$token'
+      preLoaderRoute: typeof Nr1DenunciaTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/franchise': {
@@ -1439,6 +1491,13 @@ declare module '@tanstack/react-router' {
       path: '/one-on-ones'
       fullPath: '/app/one-on-ones'
       preLoaderRoute: typeof AuthenticatedAppOneOnOnesRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/app/nr1': {
+      id: '/_authenticated/app/nr1'
+      path: '/nr1'
+      fullPath: '/app/nr1'
+      preLoaderRoute: typeof AuthenticatedAppNr1RouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
     '/_authenticated/app/notifications': {
@@ -2142,6 +2201,7 @@ interface AuthenticatedAppRouteChildren {
   AuthenticatedAppNineboxRoute: typeof AuthenticatedAppNineboxRoute
   AuthenticatedAppNotesRoute: typeof AuthenticatedAppNotesRoute
   AuthenticatedAppNotificationsRoute: typeof AuthenticatedAppNotificationsRoute
+  AuthenticatedAppNr1Route: typeof AuthenticatedAppNr1Route
   AuthenticatedAppOneOnOnesRoute: typeof AuthenticatedAppOneOnOnesRoute
   AuthenticatedAppOrganizationRoute: typeof AuthenticatedAppOrganizationRouteWithChildren
   AuthenticatedAppPdisRoute: typeof AuthenticatedAppPdisRoute
@@ -2169,6 +2229,7 @@ const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppNineboxRoute: AuthenticatedAppNineboxRoute,
   AuthenticatedAppNotesRoute: AuthenticatedAppNotesRoute,
   AuthenticatedAppNotificationsRoute: AuthenticatedAppNotificationsRoute,
+  AuthenticatedAppNr1Route: AuthenticatedAppNr1Route,
   AuthenticatedAppOneOnOnesRoute: AuthenticatedAppOneOnOnesRoute,
   AuthenticatedAppOrganizationRoute:
     AuthenticatedAppOrganizationRouteWithChildren,
@@ -2244,6 +2305,8 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  Nr1DenunciaTokenRoute: Nr1DenunciaTokenRoute,
+  Nr1TokenRoute: Nr1TokenRoute,
   PTokenRoute: PTokenRoute,
   PaTokenRoute: PaTokenRoute,
 }

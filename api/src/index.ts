@@ -31,8 +31,16 @@ import { nr1Router, publicNr1Router } from "./routes/nr1.routes.js";
 import { kudosRouter } from "./routes/kudos.routes.js";
 import { coachRouter } from "./routes/coach.routes.js";
 import { calendarRouter, calendarPublicRouter } from "./routes/calendar.routes.js";
-import { featureTemplatesRouter, bootstrapFeatureTemplates, resolveUserFeatures } from "./routes/feature-templates.routes.js";
-import { signupPlansRouter, publicSignupPlansRouter, bootstrapSignupPlans } from "./routes/signup-plans.routes.js";
+import {
+  featureTemplatesRouter,
+  bootstrapFeatureTemplates,
+  resolveUserFeatures,
+} from "./routes/feature-templates.routes.js";
+import {
+  signupPlansRouter,
+  publicSignupPlansRouter,
+  bootstrapSignupPlans,
+} from "./routes/signup-plans.routes.js";
 import { invitesRouter, publicInvitesRouter } from "./routes/invites.routes.js";
 import { neoRouter } from "./routes/neo.routes.js";
 import { jornadaRouter } from "./routes/jornada.routes.js";
@@ -175,12 +183,13 @@ app.get("/auth/me/features", requireAuth, async (req, res) => {
 
 app.use((_req, res) => res.status(404).json({ error: "Not found" }));
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error(err);
-  if (res.headersSent) return;
-  res.status(500).json({ error: "Internal server error" });
-});
+app.use(
+  (err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    console.error(err);
+    if (res.headersSent) return;
+    res.status(500).json({ error: "Internal server error" });
+  },
+);
 
 app.listen(env.PORT, () => {
   console.log(`[api] listening on :${env.PORT}`);
@@ -212,7 +221,9 @@ async function bootstrapSuperAdmins() {
     }
     const missing = emails.filter((e) => !users.find((u) => u.email.toLowerCase() === e));
     for (const e of missing) {
-      console.log(`[bootstrap] usuário ${e} ainda não cadastrado — será promovido no próximo boot após registro`);
+      console.log(
+        `[bootstrap] usuário ${e} ainda não cadastrado — será promovido no próximo boot após registro`,
+      );
     }
   } catch (err) {
     console.error("[bootstrap] falha ao promover super_admins", err);
@@ -245,7 +256,12 @@ async function bootstrapDefaultPlans() {
       description: "Consultorias e grandes redes com branding próprio.",
       priceMonthly: 0,
       priceYearly: 0,
-      features: ["Tudo do Profissional", "Branding próprio", "Métodos customizados", "SLA dedicado"],
+      features: [
+        "Tudo do Profissional",
+        "Branding próprio",
+        "Métodos customizados",
+        "SLA dedicado",
+      ],
       limits: { max_leaders: null, max_companies: null, max_ai_tokens: null },
     },
   ];
@@ -293,7 +309,12 @@ async function bootstrapDefaultModules() {
     { code: "resultado", name: "Resultado", category: "core" as const, orderIndex: 3 },
     { code: "evolucao", name: "Evolução", category: "core" as const, orderIndex: 4 },
     { code: "ia_coach", name: "IA Coach", category: "ia" as const, orderIndex: 5 },
-    { code: "dashboard_executivo", name: "Dashboard Executivo", category: "analytics" as const, orderIndex: 6 },
+    {
+      code: "dashboard_executivo",
+      name: "Dashboard Executivo",
+      category: "analytics" as const,
+      orderIndex: 6,
+    },
     { code: "analytics", name: "Analytics", category: "analytics" as const, orderIndex: 7 },
     { code: "benchmark", name: "Benchmark", category: "analytics" as const, orderIndex: 8 },
     { code: "feedback", name: "Feedback 360º", category: "people" as const, orderIndex: 9 },
@@ -315,24 +336,63 @@ async function bootstrapDefaultModules() {
 
 async function bootstrapDefaultPermissions() {
   // Matriz padrão sensata; admins podem customizar depois.
-  const grants: Array<{ role: "super_admin" | "neo_admin" | "franchise_owner" | "hr_admin" | "leader" | "collaborator"; resource: string; action: "view" | "edit" | "delete" | "export" | "admin" }> = [];
+  const grants: Array<{
+    role: "super_admin" | "neo_admin" | "franchise_owner" | "hr_admin" | "leader" | "collaborator";
+    resource: string;
+    action: "view" | "edit" | "delete" | "export" | "admin";
+  }> = [];
   const RESOURCES = [
-    "organizations", "franchises", "users", "branches", "areas", "teams",
-    "plans", "licenses", "subscriptions", "invoices", "ai_settings",
-    "branding", "methodology", "modules", "onboarding", "audit_log", "settings", "reports",
+    "organizations",
+    "franchises",
+    "users",
+    "branches",
+    "areas",
+    "teams",
+    "plans",
+    "licenses",
+    "subscriptions",
+    "invoices",
+    "ai_settings",
+    "branding",
+    "methodology",
+    "modules",
+    "onboarding",
+    "audit_log",
+    "settings",
+    "reports",
   ];
   // super_admin: tudo
-  for (const r of RESOURCES) for (const a of ["view", "edit", "delete", "export", "admin"] as const) grants.push({ role: "super_admin", resource: r, action: a });
+  for (const r of RESOURCES)
+    for (const a of ["view", "edit", "delete", "export", "admin"] as const)
+      grants.push({ role: "super_admin", resource: r, action: a });
   // neo_admin: tudo exceto delete em plans/licenses/subscriptions
-  for (const r of RESOURCES) for (const a of ["view", "edit", "export"] as const) grants.push({ role: "neo_admin", resource: r, action: a });
+  for (const r of RESOURCES)
+    for (const a of ["view", "edit", "export"] as const)
+      grants.push({ role: "neo_admin", resource: r, action: a });
   // franchise_owner: view/edit em orgs, users, branches, areas, teams, licenses, onboarding, reports
-  for (const r of ["organizations", "users", "branches", "areas", "teams", "licenses", "onboarding", "reports", "branding"]) for (const a of ["view", "edit", "export"] as const) grants.push({ role: "franchise_owner", resource: r, action: a });
+  for (const r of [
+    "organizations",
+    "users",
+    "branches",
+    "areas",
+    "teams",
+    "licenses",
+    "onboarding",
+    "reports",
+    "branding",
+  ])
+    for (const a of ["view", "edit", "export"] as const)
+      grants.push({ role: "franchise_owner", resource: r, action: a });
   // hr_admin: users/areas/teams/onboarding/reports
-  for (const r of ["users", "branches", "areas", "teams", "onboarding", "reports"]) for (const a of ["view", "edit"] as const) grants.push({ role: "hr_admin", resource: r, action: a });
+  for (const r of ["users", "branches", "areas", "teams", "onboarding", "reports"])
+    for (const a of ["view", "edit"] as const)
+      grants.push({ role: "hr_admin", resource: r, action: a });
   // leader: view teams/reports/users
-  for (const r of ["users", "areas", "teams", "reports"]) grants.push({ role: "leader", resource: r, action: "view" });
+  for (const r of ["users", "areas", "teams", "reports"])
+    grants.push({ role: "leader", resource: r, action: "view" });
   // collaborator: view próprio time/reports básicos
-  for (const r of ["teams", "reports"]) grants.push({ role: "collaborator", resource: r, action: "view" });
+  for (const r of ["teams", "reports"])
+    grants.push({ role: "collaborator", resource: r, action: "view" });
   try {
     for (const g of grants) {
       await prisma.rolePermission.upsert({

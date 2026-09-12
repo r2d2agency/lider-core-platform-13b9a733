@@ -32,6 +32,7 @@ import {
   CheckCircle2,
   PanelLeftClose,
   PanelLeftOpen,
+  ShieldAlert,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Logo } from "@/components/brand/Logo";
@@ -158,6 +159,7 @@ const nav = [
     section: "Evolução",
     module: "evolucao",
   },
+  { to: "/app/nr1", label: "NR-1", icon: ShieldAlert, section: "NR-1", module: "*" },
   { to: "/app/notes", label: "Notas & reuniões", icon: NotebookPen, section: "Base", module: "*" },
   { to: "/app/ai", label: "Assistente IA", icon: Sparkles, section: "Base", module: "*" },
   { to: "/app/profile", label: "Perfil", icon: UserCircle2, section: "Conta", module: "*" },
@@ -205,6 +207,7 @@ const conscienciaOnlyNav = [
     section: "Consciência",
     module: "consciencia",
   },
+  { to: "/app/nr1", label: "NR-1", icon: ShieldAlert, section: "NR-1", module: "*" },
   { to: "/app/notes", label: "Notas & reuniões", icon: NotebookPen, section: "Base", module: "*" },
   { to: "/app/ai", label: "Assistente IA", icon: Sparkles, section: "Base", module: "*" },
   { to: "/app/profile", label: "Perfil", icon: UserCircle2, section: "Conta", module: "*" },

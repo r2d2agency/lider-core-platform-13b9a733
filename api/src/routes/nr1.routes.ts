@@ -35,7 +35,9 @@ function badReq(res: Response, err: unknown) {
   return res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
 }
 async function isSuper(userId: string) {
-  const r = await prisma.userRole.findFirst({ where: { userId, role: { in: ["super_admin", "neo_admin"] } } });
+  const r = await prisma.userRole.findFirst({
+    where: { userId, role: { in: ["super_admin", "neo_admin"] } },
+  });
   return !!r;
 }
 async function assertOrgAccess(userId: string, orgId: string) {
@@ -57,7 +59,13 @@ async function notifyAuthorizedLeaders(orgId: string, title: string, body: strin
   });
   await Promise.all(
     leaders.map((l) =>
-      notifyInApp({ userId: l.userId, organizationId: orgId, title, body, linkUrl: "/app/nr1" }).catch(() => null),
+      notifyInApp({
+        userId: l.userId,
+        organizationId: orgId,
+        title,
+        body,
+        linkUrl: "/app/nr1",
+      }).catch(() => null),
     ),
   );
 }
@@ -69,7 +77,8 @@ export const nr1Router = Router();
 nr1Router.use(requireAuth);
 
 nr1Router.param("orgId", async (req, res, next, orgId) => {
-  if (!(await assertOrgAccess(req.userId!, orgId))) return res.status(403).json({ error: "Forbidden" });
+  if (!(await assertOrgAccess(req.userId!, orgId)))
+    return res.status(403).json({ error: "Forbidden" });
   next();
 });
 
@@ -81,7 +90,10 @@ nr1Router.get("/:orgId/nr1/surveys", async (req, res) => {
   });
   const withAvg = await Promise.all(
     surveys.map(async (s) => {
-      const agg = await prisma.nR1Response.aggregate({ where: { surveyId: s.id }, _avg: { riskScore: true } });
+      const agg = await prisma.nR1Response.aggregate({
+        where: { surveyId: s.id },
+        _avg: { riskScore: true },
+      });
       return { ...s, responseCount: s._count.responses, avgScore: agg._avg.riskScore };
     }),
   );
@@ -106,7 +118,9 @@ nr1Router.post("/:orgId/nr1/surveys", async (req, res) => {
       },
     });
     res.status(201).json(s);
-  } catch (err) { badReq(res, err); }
+  } catch (err) {
+    badReq(res, err);
+  }
 });
 
 nr1Router.get("/:orgId/nr1/surveys/:id", async (req, res) => {
@@ -126,7 +140,11 @@ nr1Router.get("/:orgId/nr1/surveys/:id", async (req, res) => {
 
   res.json({
     ...s,
-    responses: s.responses.map((r) => ({ id: r.id, riskScore: r.riskScore, createdAt: r.createdAt })),
+    responses: s.responses.map((r) => ({
+      id: r.id,
+      riskScore: r.riskScore,
+      createdAt: r.createdAt,
+    })),
     tabulation,
   });
 });
@@ -144,12 +162,16 @@ nr1Router.patch("/:orgId/nr1/surveys/:id", async (req, res) => {
       where: { id: req.params.id },
       data: {
         ...(data.title !== undefined ? { title: data.title } : {}),
-        ...(data.status !== undefined ? { status: data.status, closedAt: data.status === "closed" ? new Date() : null } : {}),
+        ...(data.status !== undefined
+          ? { status: data.status, closedAt: data.status === "closed" ? new Date() : null }
+          : {}),
         ...(data.actionPlan !== undefined ? { actionPlan: data.actionPlan ?? null } : {}),
       },
     });
     res.json(s);
-  } catch (err) { badReq(res, err); }
+  } catch (err) {
+    badReq(res, err);
+  }
 });
 
 nr1Router.delete("/:orgId/nr1/surveys/:id", async (req, res) => {
@@ -162,13 +184,16 @@ nr1Router.get("/:orgId/nr1/complaint-channel", async (req, res) => {
   const orgId = req.params.orgId;
   let channel = await prisma.nR1ComplaintChannel.findUnique({ where: { organizationId: orgId } });
   if (!channel) {
-    channel = await prisma.nR1ComplaintChannel.create({ data: { organizationId: orgId, token: genToken() } });
+    channel = await prisma.nR1ComplaintChannel.create({
+      data: { organizationId: orgId, token: genToken() },
+    });
   }
   res.json(channel);
 });
 
 nr1Router.get("/:orgId/nr1/complaints", async (req, res) => {
-  if (!(await isExec(req.userId!, req.params.orgId))) return res.status(403).json({ error: "Forbidden" });
+  if (!(await isExec(req.userId!, req.params.orgId)))
+    return res.status(403).json({ error: "Forbidden" });
   const complaints = await prisma.nR1Complaint.findMany({
     where: { organizationId: req.params.orgId },
     orderBy: { createdAt: "desc" },
@@ -179,12 +204,18 @@ nr1Router.get("/:orgId/nr1/complaints", async (req, res) => {
 const complaintUpdateSchema = z.object({ status: z.enum(["open", "in_review", "resolved"]) });
 
 nr1Router.patch("/:orgId/nr1/complaints/:id", async (req, res) => {
-  if (!(await isExec(req.userId!, req.params.orgId))) return res.status(403).json({ error: "Forbidden" });
+  if (!(await isExec(req.userId!, req.params.orgId)))
+    return res.status(403).json({ error: "Forbidden" });
   try {
     const data = complaintUpdateSchema.parse(req.body);
-    const c = await prisma.nR1Complaint.update({ where: { id: req.params.id }, data: { status: data.status } });
+    const c = await prisma.nR1Complaint.update({
+      where: { id: req.params.id },
+      data: { status: data.status },
+    });
     res.json(c);
-  } catch (err) { badReq(res, err); }
+  } catch (err) {
+    badReq(res, err);
+  }
 });
 
 // ============================================================
@@ -194,7 +225,8 @@ export const publicNr1Router = Router();
 
 publicNr1Router.get("/nr1/survey/:token", async (req, res) => {
   const s = await prisma.nR1Survey.findUnique({ where: { token: req.params.token } });
-  if (!s || s.status !== "open") return res.status(404).json({ error: "Pesquisa não encontrada ou encerrada." });
+  if (!s || s.status !== "open")
+    return res.status(404).json({ error: "Pesquisa não encontrada ou encerrada." });
   res.json({ title: s.title, questions: QUESTIONS });
 });
 
@@ -203,24 +235,39 @@ const answerSchema = z.object({ answers: z.record(z.string(), z.number().min(1).
 publicNr1Router.post("/nr1/survey/:token/answer", async (req, res) => {
   try {
     const s = await prisma.nR1Survey.findUnique({ where: { token: req.params.token } });
-    if (!s || s.status !== "open") return res.status(404).json({ error: "Pesquisa não encontrada ou encerrada." });
+    if (!s || s.status !== "open")
+      return res.status(404).json({ error: "Pesquisa não encontrada ou encerrada." });
 
     const data = answerSchema.parse(req.body);
-    const values = QUESTION_IDS.map((id) => data.answers[id]).filter((v): v is number => typeof v === "number");
+    const values = QUESTION_IDS.map((id) => data.answers[id]).filter(
+      (v): v is number => typeof v === "number",
+    );
     if (values.length === 0) return badReq(res, new Error("Responda ao menos uma pergunta."));
     const riskScore = values.reduce((a, b) => a + b, 0) / values.length;
 
-    const ip = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ?? req.socket.remoteAddress ?? null;
+    const ip =
+      (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ??
+      req.socket.remoteAddress ??
+      null;
 
     await prisma.nR1Response.create({
-      data: { surveyId: s.id, answers: data.answers as unknown as object, riskScore, respondentIp: ip },
+      data: {
+        surveyId: s.id,
+        answers: data.answers as unknown as object,
+        riskScore,
+        respondentIp: ip,
+      },
     });
     res.status(201).json({ ok: true });
-  } catch (err) { badReq(res, err); }
+  } catch (err) {
+    badReq(res, err);
+  }
 });
 
 publicNr1Router.get("/nr1/complaint/:token", async (req, res) => {
-  const channel = await prisma.nR1ComplaintChannel.findUnique({ where: { token: req.params.token } });
+  const channel = await prisma.nR1ComplaintChannel.findUnique({
+    where: { token: req.params.token },
+  });
   if (!channel) return res.status(404).json({ error: "Canal não encontrado." });
   res.json({ ok: true });
 });
@@ -232,14 +279,24 @@ const complaintSchema = z.object({
 
 publicNr1Router.post("/nr1/complaint/:token", async (req, res) => {
   try {
-    const channel = await prisma.nR1ComplaintChannel.findUnique({ where: { token: req.params.token } });
+    const channel = await prisma.nR1ComplaintChannel.findUnique({
+      where: { token: req.params.token },
+    });
     if (!channel) return res.status(404).json({ error: "Canal não encontrado." });
 
     const data = complaintSchema.parse(req.body);
-    const ip = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ?? req.socket.remoteAddress ?? null;
+    const ip =
+      (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ??
+      req.socket.remoteAddress ??
+      null;
 
     await prisma.nR1Complaint.create({
-      data: { organizationId: channel.organizationId, message: data.message, category: data.category ?? null, respondentIp: ip },
+      data: {
+        organizationId: channel.organizationId,
+        message: data.message,
+        category: data.category ?? null,
+        respondentIp: ip,
+      },
     });
 
     void notifyAuthorizedLeaders(
@@ -249,5 +306,7 @@ publicNr1Router.post("/nr1/complaint/:token", async (req, res) => {
     );
 
     res.status(201).json({ ok: true });
-  } catch (err) { badReq(res, err); }
+  } catch (err) {
+    badReq(res, err);
+  }
 });

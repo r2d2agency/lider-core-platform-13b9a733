@@ -26,6 +26,15 @@ async function assertOrgAccess(userId: string, orgId: string) {
   const m = await prisma.membership.findFirst({ where: { userId, organizationId: orgId } });
   return !!m;
 }
+// Informações sensíveis para decisão de carreira só ficam visíveis para
+// RH / responsável da organização — nunca para qualquer membro logado.
+async function isExec(userId: string, orgId: string) {
+  if (await isSuper(userId)) return true;
+  const m = await prisma.membership.findFirst({
+    where: { userId, organizationId: orgId, role: { in: ["hr_admin", "franchise_owner"] } },
+  });
+  return !!m;
+}
 function badReq(res: Response, err: unknown) {
   return res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
 }
@@ -56,44 +65,52 @@ teamRouter.get("/:orgId/team", async (req, res) => {
       orderBy: { createdAt: "asc" },
     });
 
-    const profiles = await prisma.teamMemberProfile.findMany({
-      where: { organizationId: orgId },
-    }).catch((err) => {
-      console.error("[team] falha ao carregar perfis", err);
-      return [];
-    });
+    const profiles = await prisma.teamMemberProfile
+      .findMany({
+        where: { organizationId: orgId },
+      })
+      .catch((err) => {
+        console.error("[team] falha ao carregar perfis", err);
+        return [];
+      });
     const profileByMembership = new Map(profiles.map((p) => [p.membershipId, p]));
 
     const userIds = memberships.map((m) => m.userId);
 
     const [openDelegs, feedbacks, pdis] = await Promise.all([
-      prisma.delegation.groupBy({
-        by: ["assigneeId"],
-        where: {
-          organizationId: orgId,
-          assigneeId: { in: userIds },
-          status: { notIn: ["done", "canceled"] },
-        },
-        _count: { _all: true },
-      }).catch((err) => {
-        console.error("[team] falha ao contar delegações", err);
-        return [];
-      }),
-      prisma.feedbackRecord.groupBy({
-        by: ["subjectUserId"],
-        where: { organizationId: orgId, subjectUserId: { in: userIds } },
-        _count: { _all: true },
-      }).catch((err) => {
-        console.error("[team] falha ao contar feedbacks", err);
-        return [];
-      }),
-      prisma.pdi.findMany({
-        where: { organizationId: orgId, subjectUserId: { in: userIds }, status: "ativo" },
-        select: { subjectUserId: true },
-      }).catch((err) => {
-        console.error("[team] falha ao carregar PDIs", err);
-        return [];
-      }),
+      prisma.delegation
+        .groupBy({
+          by: ["assigneeId"],
+          where: {
+            organizationId: orgId,
+            assigneeId: { in: userIds },
+            status: { notIn: ["done", "canceled"] },
+          },
+          _count: { _all: true },
+        })
+        .catch((err) => {
+          console.error("[team] falha ao contar delegações", err);
+          return [];
+        }),
+      prisma.feedbackRecord
+        .groupBy({
+          by: ["subjectUserId"],
+          where: { organizationId: orgId, subjectUserId: { in: userIds } },
+          _count: { _all: true },
+        })
+        .catch((err) => {
+          console.error("[team] falha ao contar feedbacks", err);
+          return [];
+        }),
+      prisma.pdi
+        .findMany({
+          where: { organizationId: orgId, subjectUserId: { in: userIds }, status: "ativo" },
+          select: { subjectUserId: true },
+        })
+        .catch((err) => {
+          console.error("[team] falha ao carregar PDIs", err);
+          return [];
+        }),
     ]);
 
     const delegCount = new Map(openDelegs.map((d) => [d.assigneeId, d._count._all]));
@@ -149,24 +166,49 @@ teamRouter.get("/:orgId/team/:membershipId", async (req, res) => {
   });
   if (!m) return res.status(404).json({ error: "Not found" });
 
-  const [profile, feedbacks, delegations, pdis] = await Promise.all([
-    prisma.teamMemberProfile.findUnique({ where: { membershipId } }),
-    prisma.feedbackRecord.findMany({
-      where: { organizationId: orgId, subjectUserId: m.userId },
-      orderBy: { createdAt: "desc" },
-      take: 20,
-    }),
-    prisma.delegation.findMany({
-      where: { organizationId: orgId, assigneeId: m.userId },
-      orderBy: [{ status: "asc" }, { dueAt: "asc" }],
-      take: 30,
-    }),
-    prisma.pdi.findMany({
-      where: { organizationId: orgId, subjectUserId: m.userId },
-      include: { goals: true },
-      orderBy: { createdAt: "desc" },
-    }),
-  ]);
+  const canSeeCareer = await isExec(req.userId!, orgId);
+
+  const [profile, feedbacks, delegations, pdis, assessments, pulseSends, oneOnOnes, careerEvents] =
+    await Promise.all([
+      prisma.teamMemberProfile.findUnique({ where: { membershipId } }),
+      prisma.feedbackRecord.findMany({
+        where: { organizationId: orgId, subjectUserId: m.userId },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+      }),
+      prisma.delegation.findMany({
+        where: { organizationId: orgId, assigneeId: m.userId },
+        orderBy: [{ status: "asc" }, { dueAt: "asc" }],
+        take: 30,
+      }),
+      prisma.pdi.findMany({
+        where: { organizationId: orgId, subjectUserId: m.userId },
+        include: { goals: true },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.subordinateAssessment.findMany({
+        where: { organizationId: orgId, memberId: m.userId },
+        orderBy: { updatedAt: "desc" },
+        take: 10,
+      }),
+      prisma.pulseSend.findMany({
+        where: { organizationId: orgId, subjectUserId: m.userId, status: "answered" },
+        include: { template: { select: { title: true, kind: true } }, answer: true },
+        orderBy: { answeredAt: "desc" },
+        take: 20,
+      }),
+      prisma.oneOnOne.findMany({
+        where: { organizationId: orgId, subjectUserId: m.userId },
+        orderBy: { scheduledAt: "desc" },
+        take: 20,
+      }),
+      canSeeCareer
+        ? prisma.careerEvent.findMany({
+            where: { organizationId: orgId, membershipId },
+            orderBy: { occurredAt: "desc" },
+          })
+        : Promise.resolve(null),
+    ]);
 
   res.json({
     membershipId: m.id,
@@ -177,10 +219,20 @@ teamRouter.get("/:orgId/team/:membershipId", async (req, res) => {
     role: m.role,
     areaName: m.area?.name ?? null,
     teamName: m.team?.name ?? null,
-    profile,
+    profile: profile
+      ? {
+          ...profile,
+          careerNotes: canSeeCareer ? profile.careerNotes : undefined,
+          readyForOtherAreas: canSeeCareer ? profile.readyForOtherAreas : undefined,
+        }
+      : null,
     feedbacks,
     delegations,
     pdis,
+    assessments,
+    pulseSends,
+    oneOnOnes,
+    career: canSeeCareer ? { events: careerEvents } : null,
   });
 });
 
@@ -276,6 +328,92 @@ teamRouter.put("/:orgId/team/:membershipId/box", async (req, res) => {
     badReq(res, err);
   }
 });
+// ============================================================
+// Ficha do colaborador — informações sensíveis de carreira
+// (apenas RH / responsável da organização)
+// ============================================================
+const careerNotesSchema = z.object({
+  careerNotes: z.string().optional().nullable(),
+  readyForOtherAreas: z.boolean().optional(),
+});
+
+teamRouter.put("/:orgId/team/:membershipId/career-notes", async (req, res) => {
+  const { orgId, membershipId } = req.params;
+  if (!(await isExec(req.userId!, orgId))) return res.status(403).json({ error: "Forbidden" });
+  try {
+    const m = await prisma.membership.findFirst({
+      where: { id: membershipId, organizationId: orgId },
+    });
+    if (!m) return res.status(404).json({ error: "Not found" });
+    const data = careerNotesSchema.parse(req.body);
+    const saved = await prisma.teamMemberProfile.upsert({
+      where: { membershipId },
+      update: {
+        ...(data.careerNotes !== undefined ? { careerNotes: data.careerNotes ?? null } : {}),
+        ...(data.readyForOtherAreas !== undefined
+          ? { readyForOtherAreas: data.readyForOtherAreas }
+          : {}),
+        updatedBy: req.userId!,
+      },
+      create: {
+        organizationId: orgId,
+        membershipId,
+        autonomyLevel: "n2_acompanho",
+        careerNotes: data.careerNotes ?? null,
+        readyForOtherAreas: data.readyForOtherAreas ?? false,
+        updatedBy: req.userId!,
+      },
+    });
+    res.json(saved);
+  } catch (err) {
+    badReq(res, err);
+  }
+});
+
+const careerEventSchema = z.object({
+  type: z.enum(["promotion", "lateral_move", "area_change", "hire", "recognition", "exit"]),
+  title: z.string().min(2),
+  fromLabel: z.string().optional().nullable(),
+  toLabel: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
+  occurredAt: z.string().datetime(),
+});
+
+teamRouter.post("/:orgId/team/:membershipId/career-events", async (req, res) => {
+  const { orgId, membershipId } = req.params;
+  if (!(await isExec(req.userId!, orgId))) return res.status(403).json({ error: "Forbidden" });
+  try {
+    const m = await prisma.membership.findFirst({
+      where: { id: membershipId, organizationId: orgId },
+    });
+    if (!m) return res.status(404).json({ error: "Not found" });
+    const data = careerEventSchema.parse(req.body);
+    const created = await prisma.careerEvent.create({
+      data: {
+        organizationId: orgId,
+        membershipId,
+        type: data.type,
+        title: data.title,
+        fromLabel: data.fromLabel ?? null,
+        toLabel: data.toLabel ?? null,
+        notes: data.notes ?? null,
+        occurredAt: new Date(data.occurredAt),
+        createdBy: req.userId!,
+      },
+    });
+    res.status(201).json(created);
+  } catch (err) {
+    badReq(res, err);
+  }
+});
+
+teamRouter.delete("/:orgId/team/:membershipId/career-events/:id", async (req, res) => {
+  if (!(await isExec(req.userId!, req.params.orgId)))
+    return res.status(403).json({ error: "Forbidden" });
+  await prisma.careerEvent.delete({ where: { id: req.params.id } }).catch(() => null);
+  res.status(204).end();
+});
+
 // ============================================================
 // Adicionar pessoa direto do Mapa da Equipe
 // Cria User + Profile (com whatsapp) + Membership + TeamMemberProfile

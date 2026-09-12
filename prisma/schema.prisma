@@ -1473,12 +1473,45 @@ model TeamMemberProfile {
   performanceLevel     Int?          @map("performance_level")
   potentialLevel       Int?          @map("potential_level")
   discPrimary          String?       @map("disc_primary")
+  // Informações sensíveis para decisões de carreira — visíveis apenas a
+  // RH / responsável da organização (ver `isExec` em team.routes.ts).
+  careerNotes          String?       @map("career_notes")
+  readyForOtherAreas   Boolean       @default(false) @map("ready_for_other_areas")
   updatedBy            String?       @map("updated_by") @db.Uuid
   createdAt            DateTime      @default(now()) @map("created_at")
   updatedAt            DateTime      @updatedAt @map("updated_at")
 
   @@index([organizationId])
   @@map("team_member_profiles")
+}
+
+enum CareerEventType {
+  promotion
+  lateral_move
+  area_change
+  hire
+  recognition
+  exit
+}
+
+// Histórico de promoção/movimentação — parte sensível da ficha do
+// colaborador, visível apenas a RH / responsável da organização.
+model CareerEvent {
+  id             String          @id @default(uuid()) @db.Uuid
+  organizationId String          @map("organization_id") @db.Uuid
+  membershipId   String          @map("membership_id") @db.Uuid
+  type           CareerEventType
+  title          String
+  fromLabel      String?         @map("from_label")
+  toLabel        String?         @map("to_label")
+  notes          String?
+  occurredAt     DateTime        @map("occurred_at")
+  createdBy      String?         @map("created_by") @db.Uuid
+  createdAt      DateTime        @default(now()) @map("created_at")
+
+  @@index([membershipId])
+  @@index([organizationId])
+  @@map("career_events")
 }
 
 // ============================================================
