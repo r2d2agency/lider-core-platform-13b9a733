@@ -11,6 +11,12 @@ import {
   ChevronRight,
   MessageSquareWarning,
   Lock,
+  ClipboardCheck,
+  ListChecks,
+  Sparkles,
+  ArrowRight,
+  Activity,
+  TriangleAlert,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useCurrentOrg } from "@/lib/use-current-org";
@@ -33,6 +39,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export const Route = createFileRoute("/_authenticated/app/nr1")({
   component: NR1Page,
@@ -54,6 +61,16 @@ type Survey = {
 };
 type Tabulation = { id: string; label: string; avg: number | null; count: number };
 type SurveyDetail = Survey & { tabulation: Tabulation[] };
+type AIAnalysis = {
+  summary: string;
+  priorities: Array<{ factor: string; evidence: string; recommendation: string }>;
+  actionPlan: string;
+  recommendedNextAssessment: {
+    id: "completo" | "pulso" | "lideranca" | "assedio";
+    reason: string;
+  };
+  generatedAt: string;
+};
 type ComplaintStatus = "open" | "in_review" | "resolved";
 type Complaint = {
   id: string;
@@ -116,22 +133,207 @@ function NR1Page() {
   const { orgId } = useCurrentOrg();
   if (!orgId) return null;
   return (
-    <div className="mx-auto max-w-5xl space-y-8">
-      <div>
+    <div className="mx-auto max-w-6xl space-y-6">
+      <div className="rounded-3xl border border-rose-200/70 bg-gradient-to-br from-rose-500/10 via-background to-amber-500/10 p-5 sm:p-7 dark:border-rose-500/25">
         <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
           <ShieldAlert className="h-3.5 w-3.5 text-rose-600" /> NR-1
         </div>
-        <h1 className="mt-2 font-display text-3xl sm:text-4xl">Riscos psicossociais</h1>
+        <h1 className="mt-2 font-display text-3xl sm:text-4xl">Gestão de riscos psicossociais</h1>
         <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Diagnóstico anônimo por link/QR, sem necessidade de login, com tabulação automática por
-          equipe — e um canal permanente de denúncia anônima, sem identificação do denunciante.
+          Organize o ciclo de identificação, avaliação, priorização e acompanhamento. A IA analisa
+          apenas resultados agregados e ajuda a preparar um plano para validação com SST.
         </p>
+        <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {["1. Preparar", "2. Avaliar", "3. Analisar", "4. Agir e acompanhar"].map((step) => (
+            <div
+              key={step}
+              className="rounded-xl border border-background/80 bg-background/75 px-3 py-2 text-xs font-semibold shadow-sm"
+            >
+              {step}
+            </div>
+          ))}
+        </div>
       </div>
 
-      <SurveysSection orgId={orgId} />
-      <ComplaintChannelSection orgId={orgId} />
-      <ComplaintsSection orgId={orgId} />
+      <Tabs defaultValue="overview" className="space-y-5">
+        <div className="overflow-x-auto pb-1">
+          <TabsList className="h-auto min-w-max justify-start">
+            <TabsTrigger value="overview">Visão geral</TabsTrigger>
+            <TabsTrigger value="assessments">Avaliações</TabsTrigger>
+            <TabsTrigger value="risks">Riscos e ações</TabsTrigger>
+            <TabsTrigger value="channel">Canal seguro</TabsTrigger>
+          </TabsList>
+        </div>
+        <TabsContent value="overview">
+          <NR1Overview orgId={orgId} />
+        </TabsContent>
+        <TabsContent value="assessments" className="space-y-7">
+          <AssessmentCatalog />
+          <SurveysSection orgId={orgId} />
+        </TabsContent>
+        <TabsContent value="risks" className="space-y-7">
+          <RiskWorkspace orgId={orgId} />
+          <SurveysSection orgId={orgId} />
+        </TabsContent>
+        <TabsContent value="channel" className="space-y-7">
+          <ComplaintChannelSection orgId={orgId} />
+          <ComplaintsSection orgId={orgId} />
+        </TabsContent>
+      </Tabs>
     </div>
+  );
+}
+
+function NR1Overview({ orgId }: { orgId: string }) {
+  const q = useQuery({
+    queryKey: ["nr1", "surveys", orgId],
+    queryFn: () => api<Survey[]>(`/organization/${orgId}/nr1/surveys`),
+  });
+  const surveys = q.data ?? [];
+  const latest = surveys[0];
+  const responses = surveys.reduce((sum, survey) => sum + survey.responseCount, 0);
+  const needsAction = surveys.filter(
+    (survey) => survey.responseCount >= 3 && !survey.actionPlan,
+  ).length;
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-3 sm:grid-cols-3">
+        {[
+          {
+            label: "Rodadas",
+            value: surveys.length,
+            detail: `${surveys.filter((s) => s.status === "open").length} abertas`,
+            icon: ClipboardCheck,
+          },
+          {
+            label: "Respostas agregadas",
+            value: responses,
+            detail: "sem identificação individual",
+            icon: Activity,
+          },
+          {
+            label: "Planos pendentes",
+            value: needsAction,
+            detail: "rodadas prontas para análise",
+            icon: ListChecks,
+          },
+        ].map(({ label, value, detail, icon: Icon }) => (
+          <div key={label} className="rounded-2xl border border-border bg-card p-4">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>{label}</span>
+              <Icon className="h-4 w-4" />
+            </div>
+            <div className="mt-2 text-2xl font-semibold tabular-nums">
+              {q.isLoading ? "—" : value}
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+          </div>
+        ))}
+      </div>
+      <div className="grid gap-4 lg:grid-cols-[1.2fr_.8fr]">
+        <div className="rounded-2xl border border-border bg-card p-5">
+          <h2 className="font-display text-xl">Próximo passo recomendado</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {!latest
+              ? "Crie o diagnóstico completo para estabelecer a linha de base da organização."
+              : latest.responseCount < 3
+                ? `Compartilhe “${latest.title}” até obter ao menos 3 respostas para preservar o anonimato.`
+                : !latest.actionPlan
+                  ? `Abra “${latest.title}”, gere a análise agregada com IA e valide o plano de ação.`
+                  : "Acompanhe a execução do plano e programe um pulso curto para verificar a evolução."}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-amber-200/70 bg-amber-500/5 p-5 dark:border-amber-500/25">
+          <div className="flex items-center gap-2 text-sm font-semibold">
+            <TriangleAlert className="h-4 w-4 text-amber-600" /> Uso responsável
+          </div>
+          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+            O aplicativo apoia o processo e a documentação. A caracterização dos riscos e as medidas
+            do PGR devem ser validadas por profissionais responsáveis por SST.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const ASSESSMENTS = [
+  {
+    name: "Diagnóstico completo",
+    when: "Linha de base e revisão periódica",
+    detail:
+      "Carga, autonomia, segurança psicológica, relações, reconhecimento, clareza, suporte e equilíbrio.",
+    available: true,
+  },
+  {
+    name: "Pulso de acompanhamento",
+    when: "30–90 dias após iniciar ações",
+    detail: "Confirma se as medidas adotadas estão melhorando a percepção das equipes.",
+    available: false,
+  },
+  {
+    name: "Apoio e práticas de liderança",
+    when: "Quando autonomia, clareza ou suporte ficam baixos",
+    detail: "Aprofunda fatores da organização e da atuação da liderança.",
+    available: false,
+  },
+  {
+    name: "Respeito, assédio e violência",
+    when: "Quando há sinais de conflito, desrespeito ou medo",
+    detail: "Deve ser aplicado com protocolo protegido e orientação especializada.",
+    available: false,
+  },
+];
+
+function AssessmentCatalog() {
+  return (
+    <section className="space-y-3">
+      <div>
+        <h2 className="font-display text-xl">Qual avaliação enviar?</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Comece amplo e aprofunde somente onde os dados indicarem necessidade.
+        </p>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2">
+        {ASSESSMENTS.map((item) => (
+          <div key={item.name} className="rounded-2xl border border-border bg-card p-4">
+            <div className="flex items-start justify-between gap-3">
+              <h3 className="font-semibold">{item.name}</h3>
+              <span
+                className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold ${item.available ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300" : "bg-secondary text-muted-foreground"}`}
+              >
+                {item.available ? "Disponível" : "Próxima etapa"}
+              </span>
+            </div>
+            <p className="mt-2 text-xs font-medium">Quando usar: {item.when}</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{item.detail}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function RiskWorkspace({ orgId }: { orgId: string }) {
+  const q = useQuery({
+    queryKey: ["nr1", "surveys", orgId],
+    queryFn: () => api<Survey[]>(`/organization/${orgId}/nr1/surveys`),
+  });
+  const ready = (q.data ?? []).filter((survey) => survey.responseCount >= 3);
+  return (
+    <section className="rounded-2xl border border-border bg-card p-5">
+      <div className="flex items-center gap-2">
+        <ListChecks className="h-5 w-5 text-rose-600" />
+        <h2 className="font-display text-xl">Inventário e plano de ação</h2>
+      </div>
+      <p className="mt-2 text-sm text-muted-foreground">
+        Abra uma rodada com pelo menos 3 respostas para ver os fatores priorizados, solicitar a
+        análise da IA e registrar o plano.{" "}
+        {ready.length
+          ? `${ready.length} rodada(s) pronta(s) para análise.`
+          : "Ainda não há rodada com respostas suficientes."}
+      </p>
+    </section>
   );
 }
 
@@ -257,6 +459,7 @@ function SurveyDetailDialog({
 }) {
   const qc = useQueryClient();
   const [actionPlan, setActionPlan] = useState(survey.actionPlan ?? "");
+  const [aiAnalysis, setAiAnalysis] = useState<AIAnalysis | null>(null);
 
   const detail = useQuery({
     queryKey: ["nr1", "survey", orgId, survey.id],
@@ -290,6 +493,19 @@ function SurveyDetailDialog({
     onSuccess: () => {
       toast.success("Plano de ação salvo.");
       invalidate();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const analyze = useMutation({
+    mutationFn: () =>
+      api<AIAnalysis>(`/organization/${orgId}/nr1/surveys/${survey.id}/ai-analysis`, {
+        method: "POST",
+      }),
+    onSuccess: (analysis) => {
+      setAiAnalysis(analysis);
+      setActionPlan(analysis.actionPlan);
+      toast.success("Análise agregada gerada. Revise antes de salvar.");
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -333,10 +549,75 @@ function SurveyDetailDialog({
           </ul>
         )}
 
+        {t.some((item) => item.count > 0) && (
+          <div className="rounded-xl border border-violet-200/70 bg-violet-500/5 p-4 dark:border-violet-500/25">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  <Sparkles className="h-4 w-4 text-violet-600" /> Análise assistida por IA
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Usa somente médias agregadas. Exige ao menos 3 respostas.
+                </p>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="gap-1.5"
+                onClick={() => analyze.mutate()}
+                disabled={analyze.isPending || (detail.data?.responseCount ?? 0) < 3}
+              >
+                {analyze.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4" />
+                )}
+                Analisar resultados
+              </Button>
+            </div>
+            {aiAnalysis && (
+              <div className="mt-4 space-y-3 text-sm">
+                <p>{aiAnalysis.summary}</p>
+                <ul className="space-y-2">
+                  {aiAnalysis.priorities.map((priority) => (
+                    <li key={priority.factor} className="rounded-lg bg-background/80 p-3">
+                      <div className="font-semibold">{priority.factor}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">{priority.evidence}</div>
+                      <div className="mt-1 text-xs">{priority.recommendation}</div>
+                    </li>
+                  ))}
+                </ul>
+                <div className="flex gap-2 rounded-lg border border-border bg-background/80 p-3 text-xs">
+                  <ArrowRight className="mt-0.5 h-4 w-4 shrink-0" />
+                  <div>
+                    <strong>Próxima avaliação sugerida:</strong>{" "}
+                    {ASSESSMENTS.find((item) =>
+                      item.name
+                        .toLowerCase()
+                        .includes(
+                          aiAnalysis.recommendedNextAssessment.id === "completo"
+                            ? "completo"
+                            : aiAnalysis.recommendedNextAssessment.id === "pulso"
+                              ? "pulso"
+                              : aiAnalysis.recommendedNextAssessment.id === "lideranca"
+                                ? "liderança"
+                                : "assédio",
+                        ),
+                    )?.name ?? aiAnalysis.recommendedNextAssessment.id}
+                    . {aiAnalysis.recommendedNextAssessment.reason}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <div>
           <Label>Plano de ação de melhoria</Label>
           <Textarea
             rows={3}
+            className="resize-none"
             value={actionPlan}
             onChange={(e) => setActionPlan(e.target.value)}
             placeholder="O que será feito a partir deste diagnóstico?"

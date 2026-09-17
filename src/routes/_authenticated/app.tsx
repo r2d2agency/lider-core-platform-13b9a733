@@ -49,6 +49,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 
 export const Route = createFileRoute("/_authenticated/app")({
   ssr: false,
@@ -298,6 +305,7 @@ function AppShell() {
   const { signOut, user } = useAuth();
   const { orgId } = useCurrentOrg();
   const [voiceOpen, setVoiceOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
 
   // Detecta a plataforma: no desktop mostramos a versão completa com sidebar.
@@ -347,7 +355,7 @@ function AppShell() {
     queryClient.clear();
     signOut();
     toast.success("Até logo.");
-    navigate({ to: "/auth", search: {}, replace: true } as any);
+    navigate({ to: "/auth", search: {}, replace: true });
   };
 
   const handleVoiceIntent = async (intent: VoiceIntent) => {
@@ -707,6 +715,22 @@ function AppShell() {
           <ul className="mx-auto flex max-w-3xl items-center" style={{ width: "100%" }}>
             {visibleMobileNav.map(({ to, label, icon: Icon }) => {
               const active = isActiveRoute(to);
+              if (label === "Mais") {
+                return (
+                  <li key="mobile-more" className="flex-1">
+                    <button
+                      type="button"
+                      onClick={() => setMoreOpen(true)}
+                      className="flex w-full cursor-pointer flex-col items-center gap-1 py-2.5 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <span className="grid h-9 w-9 place-items-center rounded-full">
+                        <Icon className="h-5 w-5" strokeWidth={1.75} />
+                      </span>
+                      {label}
+                    </button>
+                  </li>
+                );
+              }
               return (
                 <li key={to} className="flex-1">
                   <Link
@@ -733,6 +757,37 @@ function AppShell() {
           </ul>
           <div className="h-[env(safe-area-inset-bottom)]" />
         </nav>
+        <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
+          <SheetContent
+            side="bottom"
+            className="max-h-[82vh] rounded-t-3xl pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:hidden"
+          >
+            <SheetHeader className="text-left">
+              <SheetTitle>Mais recursos</SheetTitle>
+              <SheetDescription>Acesse segurança, conta e suporte.</SheetDescription>
+            </SheetHeader>
+            <nav className="mt-5 grid gap-2">
+              {[
+                { to: "/app/nr1", label: "NR-1 e riscos psicossociais", icon: ShieldAlert },
+                { to: "/app/notifications", label: "Notificações", icon: Bell },
+                { to: "/app/profile", label: "Perfil", icon: UserCircle2 },
+                { to: "/app/settings", label: "Configurações", icon: Settings2 },
+                { to: "/app/help", label: "Ajuda", icon: HelpCircle },
+              ].map(({ to, label, icon: ItemIcon }) => (
+                <Link
+                  key={to}
+                  to={to}
+                  search={{}}
+                  onClick={() => setMoreOpen(false)}
+                  className="flex min-h-12 items-center gap-3 rounded-xl border border-border px-4 py-3 text-sm font-medium transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <ItemIcon className="h-5 w-5 text-muted-foreground" />
+                  {label}
+                </Link>
+              ))}
+            </nav>
+          </SheetContent>
+        </Sheet>
       </div>
     </div>
   );

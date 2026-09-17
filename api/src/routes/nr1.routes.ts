@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import { prisma } from "../prisma.js";
 import { requireAuth } from "../auth.js";
 import { notifyInApp } from "../lib/notifications.js";
+import { completeChat } from "../lib/ai-gateway.js";
 
 /**
  * NR-1 — Diagnóstico de riscos psicossociais + canal de denúncia anônima
@@ -149,6 +150,108 @@ nr1Router.get("/:orgId/nr1/surveys/:id", async (req, res) => {
   });
 });
 
+const aiAnalysisSchema = z.object({
+  summary: z.string(),
+  priorities: z.array(
+    z.object({ factor: z.string(), evidence: z.string(), recommendation: z.string() }),
+  ),
+  actionPlan: z.string(),
+  recommendedNextAssessment: z.object({
+    id: z.enum(["completo", "pulso", "lideranca", "assedio"]),
+    reason: z.string(),
+  }),
+});
+
+nr1Router.post("/:orgId/nr1/surveys/:id/ai-analysis", async (req, res) => {
+  const survey = await prisma.nR1Survey.findFirst({
+    where: { id: req.params.id, organizationId: req.params.orgId },
+    include: { responses: true },
+  });
+  if (!survey) return res.status(404).json({ error: "Pesquisa não encontrada" });
+  if (survey.responses.length < 3) {
+    return res.status(400).json({
+      error: "São necessárias pelo menos 3 respostas para proteger o anonimato e gerar a análise.",
+    });
+  }
+
+  const tabulation = QUESTIONS.map((question) => {
+    const values = survey.responses
+      .map((response) => (response.answers as Record<string, number>)[question.id])
+      .filter((value): value is number => typeof value === "number");
+    return {
+      factor: question.label,
+      average: values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null,
+      responses: values.length,
+    };
+  });
+
+  try {
+    const raw = await completeChat({
+      messages: [
+        {
+          role: "system",
+          content:
+            "Você apoia o gerenciamento de fatores de risco psicossociais relacionados ao trabalho no GRO/PGR da NR-1. " +
+            "Analise somente dados agregados; não faça diagnóstico clínico, não identifique indivíduos e não declare conformidade legal. " +
+            "Notas menores indicam pior percepção e maior prioridade. Sugira medidas sobre a organização do trabalho, com responsável, prazo e evidência de acompanhamento. " +
+            "Responda apenas JSON válido, sem markdown.",
+        },
+        {
+          role: "user",
+          content: JSON.stringify({
+            survey: survey.title,
+            responseCount: survey.responses.length,
+            scale: "1 a 5; menor nota representa maior atenção",
+            aggregatedResults: tabulation,
+            availableAssessments: [
+              {
+                id: "completo",
+                name: "Diagnóstico completo",
+                use: "linha de base e revisão ampla",
+              },
+              {
+                id: "pulso",
+                name: "Pulso de acompanhamento",
+                use: "verificar evolução após ações",
+              },
+              {
+                id: "lideranca",
+                name: "Apoio e práticas de liderança",
+                use: "aprofundar autonomia, clareza e suporte",
+              },
+              {
+                id: "assedio",
+                name: "Respeito, assédio e violência",
+                use: "aprofundar sinais de desrespeito com protocolo protegido",
+              },
+            ],
+            output: {
+              summary: "síntese em até 3 frases",
+              priorities: [{ factor: "fator", evidence: "dado agregado", recommendation: "ação" }],
+              actionPlan:
+                "plano textual com até 3 ações no formato ação | responsável sugerido | prazo | evidência",
+              recommendedNextAssessment: {
+                id: "completo|pulso|lideranca|assedio",
+                reason: "motivo",
+              },
+            },
+          }),
+        },
+      ],
+    });
+    const cleaned = raw.replace(/```json|```/g, "").trim();
+    const start = cleaned.indexOf("{");
+    const end = cleaned.lastIndexOf("}");
+    const parsed = aiAnalysisSchema.parse(JSON.parse(cleaned.slice(start, end + 1)));
+    res.json({ ...parsed, generatedAt: new Date().toISOString() });
+  } catch (error) {
+    console.error("[nr1/ai-analysis]", error);
+    res
+      .status(500)
+      .json({ error: error instanceof Error ? error.message : "Falha ao gerar análise" });
+  }
+});
+
 const surveyUpdateSchema = z.object({
   title: z.string().min(2).optional(),
   status: z.enum(["open", "closed"]).optional(),
@@ -158,8 +261,8 @@ const surveyUpdateSchema = z.object({
 nr1Router.patch("/:orgId/nr1/surveys/:id", async (req, res) => {
   try {
     const data = surveyUpdateSchema.parse(req.body);
-    const s = await prisma.nR1Survey.update({
-      where: { id: req.params.id },
+    const result = await prisma.nR1Survey.updateMany({
+      where: { id: req.params.id, organizationId: req.params.orgId },
       data: {
         ...(data.title !== undefined ? { title: data.title } : {}),
         ...(data.status !== undefined
@@ -168,14 +271,18 @@ nr1Router.patch("/:orgId/nr1/surveys/:id", async (req, res) => {
         ...(data.actionPlan !== undefined ? { actionPlan: data.actionPlan ?? null } : {}),
       },
     });
-    res.json(s);
+    if (!result.count) return res.status(404).json({ error: "Pesquisa não encontrada" });
+    const survey = await prisma.nR1Survey.findUnique({ where: { id: req.params.id } });
+    res.json(survey);
   } catch (err) {
     badReq(res, err);
   }
 });
 
 nr1Router.delete("/:orgId/nr1/surveys/:id", async (req, res) => {
-  await prisma.nR1Survey.delete({ where: { id: req.params.id } }).catch(() => null);
+  await prisma.nR1Survey.deleteMany({
+    where: { id: req.params.id, organizationId: req.params.orgId },
+  });
   res.status(204).end();
 });
 
@@ -208,11 +315,13 @@ nr1Router.patch("/:orgId/nr1/complaints/:id", async (req, res) => {
     return res.status(403).json({ error: "Forbidden" });
   try {
     const data = complaintUpdateSchema.parse(req.body);
-    const c = await prisma.nR1Complaint.update({
-      where: { id: req.params.id },
+    const result = await prisma.nR1Complaint.updateMany({
+      where: { id: req.params.id, organizationId: req.params.orgId },
       data: { status: data.status },
     });
-    res.json(c);
+    if (!result.count) return res.status(404).json({ error: "Denúncia não encontrada" });
+    const complaint = await prisma.nR1Complaint.findUnique({ where: { id: req.params.id } });
+    res.json(complaint);
   } catch (err) {
     badReq(res, err);
   }
@@ -245,17 +354,11 @@ publicNr1Router.post("/nr1/survey/:token/answer", async (req, res) => {
     if (values.length === 0) return badReq(res, new Error("Responda ao menos uma pergunta."));
     const riskScore = values.reduce((a, b) => a + b, 0) / values.length;
 
-    const ip =
-      (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ??
-      req.socket.remoteAddress ??
-      null;
-
     await prisma.nR1Response.create({
       data: {
         surveyId: s.id,
         answers: data.answers as unknown as object,
         riskScore,
-        respondentIp: ip,
       },
     });
     res.status(201).json({ ok: true });
@@ -285,17 +388,11 @@ publicNr1Router.post("/nr1/complaint/:token", async (req, res) => {
     if (!channel) return res.status(404).json({ error: "Canal não encontrado." });
 
     const data = complaintSchema.parse(req.body);
-    const ip =
-      (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ??
-      req.socket.remoteAddress ??
-      null;
-
     await prisma.nR1Complaint.create({
       data: {
         organizationId: channel.organizationId,
         message: data.message,
         category: data.category ?? null,
-        respondentIp: ip,
       },
     });
 
