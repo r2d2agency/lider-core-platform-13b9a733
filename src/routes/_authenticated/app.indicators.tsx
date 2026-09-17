@@ -80,6 +80,7 @@ type Concentration = {
   total: number;
   byLeader: Array<{
     leaderId: string;
+    leaderName: string | null;
     total: number;
     ownedByLeader: number;
     ratio: number;
@@ -273,12 +274,15 @@ function ConcentrationCard({ data }: { data: Concentration | undefined }) {
               {over.slice(0, 5).map((l) => (
                 <li
                   key={l.leaderId}
-                  className="flex justify-between rounded-md bg-background/60 px-3 py-1.5"
+                  className="flex items-center justify-between gap-3 rounded-md bg-background/60 px-3 py-1.5"
                 >
-                  <span className="text-muted-foreground">
-                    líder <code className="text-foreground">{l.leaderId.slice(0, 8)}</code>
+                  <span
+                    className="min-w-0 truncate text-foreground"
+                    title={l.leaderName ?? undefined}
+                  >
+                    {l.leaderName ?? `Líder ${l.leaderId.slice(0, 8)}`}
                   </span>
-                  <span className="font-medium">
+                  <span className="shrink-0 font-medium tabular-nums">
                     {Math.round(l.ratio * 100)}% ({l.ownedByLeader}/{l.total})
                   </span>
                 </li>

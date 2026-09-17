@@ -571,8 +571,30 @@ export async function computeConcentration(orgId: string) {
     if (!d.assigneeId) g.ownedByDelegator += 1;
     grouped.set(d.delegatorId, g);
   }
+  const leaderIds = Array.from(grouped.keys());
+  const leaders = leaderIds.length
+    ? await prisma.membership.findMany({
+        where: { organizationId: orgId, userId: { in: leaderIds } },
+        select: {
+          userId: true,
+          user: {
+            select: {
+              email: true,
+              profile: { select: { fullName: true } },
+            },
+          },
+        },
+      })
+    : [];
+  const leaderNames = new Map(
+    leaders.map((membership) => [
+      membership.userId,
+      membership.user.profile?.fullName?.trim() || membership.user.email,
+    ]),
+  );
   const byLeader = Array.from(grouped.entries()).map(([leaderId, g]) => ({
     leaderId,
+    leaderName: leaderNames.get(leaderId) ?? null,
     total: g.total,
     ownedByLeader: g.ownedByDelegator,
     ratio: g.total ? g.ownedByDelegator / g.total : 0,
