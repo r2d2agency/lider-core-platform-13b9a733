@@ -1,10 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { toast } from "sonner";
 import {
   Activity,
   ArrowRight,
   CalendarRange,
   CheckCircle2,
+  ChevronRight,
   Compass,
   Loader2,
   Scale,
@@ -16,6 +19,17 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useCurrentOrg } from "@/lib/use-current-org";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export const Route = createFileRoute("/_authenticated/app/results")({
   component: ResultsPage,
@@ -179,45 +193,18 @@ function ResultsPage() {
   const total =
     data.totals.on_target + data.totals.warning + data.totals.off_target + data.totals.unknown;
 
+  if (!data.activeCycle || data.activeCycle.goals.length === 0 || total === 0) {
+    return (
+      <div className="space-y-8">
+        <ResultsHeader />
+        <ResultsSetup orgId={orgId} overview={data} />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
-      <header className="rounded-3xl border border-border bg-card p-5 shadow-sm md:p-7">
-        <div className="flex items-end justify-between gap-4">
-          <div>
-            <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-rose-600">
-              Módulo Resultado · Alcançar metas
-            </div>
-            <h1 className="mt-2 font-display text-3xl md:text-4xl">Gestão à vista</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-              Comece pelo que o time precisa entregar e acompanhe os sinais que antecipam o
-              resultado — antes do fim do ciclo.
-            </p>
-          </div>
-          <Link
-            to="/app/indicators"
-            className="hidden shrink-0 items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium hover:bg-secondary md:inline-flex"
-          >
-            Gerenciar indicadores <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
-        </div>
-        <ol className="mt-6 grid grid-cols-2 gap-2 border-t border-border pt-5 sm:grid-cols-3 lg:grid-cols-6">
-          {[
-            "Meta do time",
-            "Indicadores",
-            "Lacuna",
-            "Responsável",
-            "Plano de ação",
-            "Acompanhamento",
-          ].map((step, index) => (
-            <li key={step} className="flex items-center gap-2 text-xs font-medium">
-              <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-rose-500/10 text-[10px] font-bold text-rose-600">
-                {index + 1}
-              </span>
-              <span>{step}</span>
-            </li>
-          ))}
-        </ol>
-      </header>
+      <ResultsHeader />
 
       <section className="grid gap-3 md:grid-cols-4">
         <StatTile label="Indicadores" value={total} icon={<Target className="h-4 w-4" />} />
@@ -497,6 +484,500 @@ function ResultsPage() {
       </section>
     </div>
   );
+}
+
+function ResultsHeader() {
+  return (
+    <header className="rounded-3xl border border-border bg-card p-5 shadow-sm md:p-7">
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-rose-600">
+            Módulo Resultado · Alcançar metas
+          </div>
+          <h1 className="mt-2 font-display text-3xl md:text-4xl">Gestão à vista</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+            Comece pelo que o time precisa entregar e acompanhe os sinais que antecipam o resultado
+            — antes do fim do ciclo.
+          </p>
+        </div>
+        <Link
+          to="/app/indicators"
+          className="hidden shrink-0 items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:inline-flex"
+        >
+          Gerenciar indicadores <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
+      </div>
+      <ol className="mt-6 grid grid-cols-2 gap-2 border-t border-border pt-5 sm:grid-cols-3 lg:grid-cols-6">
+        {[
+          "Meta do time",
+          "Indicadores",
+          "Lacuna",
+          "Responsável",
+          "Plano de ação",
+          "Acompanhamento",
+        ].map((step, index) => (
+          <li key={step} className="flex items-center gap-2 text-xs font-medium">
+            <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-rose-500/10 text-[10px] font-bold text-rose-600">
+              {index + 1}
+            </span>
+            <span>{step}</span>
+          </li>
+        ))}
+      </ol>
+    </header>
+  );
+}
+
+type TeamMember = { userId: string; fullName: string };
+type CreatedCycle = { id: string };
+type CreatedGoal = { id: string };
+type CreatedIndicator = { id: string };
+
+function ResultsSetup({ orgId, overview }: { orgId: string; overview: Overview }) {
+  const queryClient = useQueryClient();
+  const activeCycle = overview.activeCycle;
+  const firstGoal = activeCycle?.goals[0] ?? null;
+  const stage = !activeCycle ? "cycle" : !firstGoal ? "goal" : "indicator";
+  const today = toDateInput(new Date());
+  const ninetyDaysFromNow = toDateInput(new Date(Date.now() + 90 * 24 * 60 * 60 * 1000));
+
+  const [cycleName, setCycleName] = useState("Ciclo de resultados");
+  const [startAt, setStartAt] = useState(today);
+  const [endAt, setEndAt] = useState(ninetyDaysFromNow);
+  const [goalTitle, setGoalTitle] = useState("");
+  const [measurable, setMeasurable] = useState("");
+  const [goalTarget, setGoalTarget] = useState("");
+  const [goalDueAt, setGoalDueAt] = useState(ninetyDaysFromNow);
+  const [ownerUserId, setOwnerUserId] = useState("");
+  const [indicatorName, setIndicatorName] = useState("");
+  const [indicatorUnit, setIndicatorUnit] = useState("");
+  const [indicatorTarget, setIndicatorTarget] = useState("");
+  const [currentValue, setCurrentValue] = useState("");
+  const [direction, setDirection] = useState<"higher_better" | "lower_better">("higher_better");
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const membersQ = useQuery({
+    queryKey: ["team-members", orgId],
+    queryFn: () => api<TeamMember[]>(`/organization/${orgId}/team`),
+  });
+
+  const refreshResults = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["results-overview", orgId] }),
+      queryClient.invalidateQueries({ queryKey: ["results-mvr", orgId] }),
+      queryClient.invalidateQueries({ queryKey: ["cycles", orgId] }),
+      queryClient.invalidateQueries({ queryKey: ["indicators", orgId] }),
+    ]);
+  };
+
+  const save = useMutation({
+    mutationFn: async () => {
+      setSubmitError(null);
+      if (stage === "cycle") {
+        const cycle = await api<CreatedCycle>(`/organization/${orgId}/cycles`, {
+          method: "POST",
+          body: {
+            name: cycleName.trim(),
+            status: "active",
+            startAt: new Date(`${startAt}T12:00:00`).toISOString(),
+            endAt: new Date(`${endAt}T12:00:00`).toISOString(),
+            summary: measurable.trim() || null,
+          },
+        });
+        await createGoal(orgId, cycle.id, {
+          title: goalTitle,
+          measurable,
+          target: goalTarget,
+          dueAt: goalDueAt,
+          ownerUserId,
+        });
+        return "Meta do time criada. Agora defina o indicador que antecipa o resultado.";
+      }
+
+      if (stage === "goal") {
+        await createGoal(orgId, activeCycle!.id, {
+          title: goalTitle,
+          measurable,
+          target: goalTarget,
+          dueAt: goalDueAt,
+          ownerUserId,
+        });
+        return "Meta do time criada. Agora defina o indicador que antecipa o resultado.";
+      }
+
+      const target = parseLocalizedNumber(indicatorTarget);
+      const indicator = await api<CreatedIndicator>(`/organization/${orgId}/indicators`, {
+        method: "POST",
+        body: {
+          level: "team",
+          name: indicatorName.trim(),
+          description: `Indicador de atividade ligado à meta: ${firstGoal!.title}`,
+          unit: indicatorUnit.trim() || null,
+          direction,
+          target,
+          tags: ["meta-do-time"],
+          active: true,
+        },
+      });
+
+      const current = currentValue.trim() ? parseLocalizedNumber(currentValue) : null;
+      await api(`/organization/${orgId}/cycles/${activeCycle!.id}/goals/${firstGoal!.id}`, {
+        method: "PATCH",
+        body: {
+          indicatorId: indicator.id,
+          targetValue: target,
+          ...(current != null ? { currentValue: current } : {}),
+        },
+      });
+
+      if (current != null) {
+        const now = new Date();
+        await api(`/organization/${orgId}/indicators/${indicator.id}/readings`, {
+          method: "POST",
+          body: {
+            periodYear: now.getFullYear(),
+            periodMonth: now.getMonth() + 1,
+            value: current,
+            notes: "Leitura inicial registrada na configuração do módulo Resultado.",
+          },
+        });
+      }
+      return "Indicador vinculado. Seu painel de resultados está pronto.";
+    },
+    onSuccess: async (message) => {
+      await refreshResults();
+      toast.success(message);
+    },
+    onError: async (error: Error) => {
+      // Se o ciclo foi criado mas a meta falhou, a atualização evita criar um ciclo duplicado
+      // na tentativa seguinte e leva o usuário diretamente para a etapa que falta.
+      await refreshResults();
+      setSubmitError(error.message);
+      toast.error("Não foi possível salvar esta etapa.");
+    },
+  });
+
+  const goalFieldsValid =
+    goalTitle.trim().length >= 2 &&
+    measurable.trim().length >= 2 &&
+    goalTarget.trim() !== "" &&
+    goalDueAt !== "";
+  const canSubmit =
+    stage === "cycle"
+      ? cycleName.trim().length >= 2 &&
+        startAt !== "" &&
+        endAt !== "" &&
+        startAt <= endAt &&
+        goalFieldsValid
+      : stage === "goal"
+        ? goalFieldsValid
+        : indicatorName.trim().length >= 1 && indicatorTarget.trim() !== "";
+
+  const activeStep = stage === "indicator" ? 2 : 1;
+
+  return (
+    <section className="overflow-hidden rounded-3xl border border-rose-500/20 bg-card shadow-sm">
+      <div className="grid lg:grid-cols-[300px_1fr]">
+        <aside className="bg-rose-500/[0.05] p-5 md:p-7">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-rose-600">
+            Configuração guiada
+          </div>
+          <h2 className="mt-2 font-display text-2xl">Comece pela meta, não pelo indicador</h2>
+          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+            Primeiro registre o que a equipe precisa entregar. Depois escolha o sinal controlável
+            que mostra, com antecedência, se a meta será alcançada.
+          </p>
+          <ol className="mt-6 space-y-4">
+            {[
+              ["Meta do time", "Resultado, prazo e responsável"],
+              ["Indicador de atividade", "Meta, leitura atual e direção"],
+              ["Agir sobre a lacuna", "Desdobramento e plano de ação"],
+            ].map(([title, description], index) => {
+              const step = index + 1;
+              const done = step < activeStep;
+              const active = step === activeStep;
+              return (
+                <li key={title} className="flex gap-3">
+                  <span
+                    className={
+                      "grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-bold " +
+                      (done || active
+                        ? "bg-rose-600 text-white"
+                        : "border border-border bg-background text-muted-foreground")
+                    }
+                  >
+                    {done ? <CheckCircle2 className="h-4 w-4" /> : step}
+                  </span>
+                  <span>
+                    <span className="block text-sm font-semibold">{title}</span>
+                    <span className="block text-xs text-muted-foreground">{description}</span>
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        </aside>
+
+        <form
+          noValidate
+          className="p-5 md:p-7"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (canSubmit && !save.isPending) save.mutate();
+          }}
+        >
+          <div className="mb-6">
+            <div className="text-xs font-semibold text-rose-600">Etapa {activeStep} de 3</div>
+            <h2 className="mt-1 font-display text-2xl">
+              {stage === "indicator"
+                ? "Qual atividade antecipa o resultado?"
+                : "O que o time precisa entregar?"}
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+              {stage === "indicator"
+                ? `A meta “${firstGoal?.title}” já existe. Agora cadastre um indicador que a equipe consiga influenciar no dia a dia.`
+                : "Defina uma entrega mensurável. O indicador virá na próxima etapa, ligado a esta meta."}
+            </p>
+          </div>
+
+          {stage === "cycle" && (
+            <fieldset className="mb-6 grid gap-4 rounded-2xl border border-border bg-secondary/30 p-4 sm:grid-cols-3">
+              <legend className="px-1 text-xs font-semibold">Período de acompanhamento</legend>
+              <div className="sm:col-span-3">
+                <Label htmlFor="result-cycle-name">Nome do ciclo</Label>
+                <Input
+                  id="result-cycle-name"
+                  value={cycleName}
+                  onChange={(event) => setCycleName(event.target.value)}
+                  placeholder="Ex.: Resultados do 4º trimestre"
+                />
+              </div>
+              <div>
+                <Label htmlFor="result-cycle-start">Início</Label>
+                <Input
+                  id="result-cycle-start"
+                  type="date"
+                  value={startAt}
+                  onChange={(event) => setStartAt(event.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="result-cycle-end">Fim</Label>
+                <Input
+                  id="result-cycle-end"
+                  type="date"
+                  value={endAt}
+                  onChange={(event) => setEndAt(event.target.value)}
+                />
+              </div>
+            </fieldset>
+          )}
+
+          {stage !== "indicator" ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <Label htmlFor="result-goal-title">Meta do time</Label>
+                <Input
+                  id="result-goal-title"
+                  value={goalTitle}
+                  onChange={(event) => setGoalTitle(event.target.value)}
+                  placeholder="Ex.: Atingir R$ 500 mil em vendas por mês"
+                  aria-describedby="result-goal-title-help"
+                />
+                <p id="result-goal-title-help" className="mt-1 text-xs text-muted-foreground">
+                  Escreva a entrega da equipe, não uma tarefa individual.
+                </p>
+              </div>
+              <div className="sm:col-span-2">
+                <Label htmlFor="result-goal-measurable">Como saberemos que foi alcançada?</Label>
+                <Textarea
+                  id="result-goal-measurable"
+                  className="resize-none"
+                  rows={3}
+                  value={measurable}
+                  onChange={(event) => setMeasurable(event.target.value)}
+                  placeholder="Ex.: Receita reconhecida no mês, excluindo cancelamentos"
+                />
+              </div>
+              <div>
+                <Label htmlFor="result-goal-target">Valor-alvo</Label>
+                <Input
+                  id="result-goal-target"
+                  inputMode="decimal"
+                  value={goalTarget}
+                  onChange={(event) => setGoalTarget(event.target.value)}
+                  placeholder="500000"
+                />
+              </div>
+              <div>
+                <Label htmlFor="result-goal-due">Prazo</Label>
+                <Input
+                  id="result-goal-due"
+                  type="date"
+                  value={goalDueAt}
+                  onChange={(event) => setGoalDueAt(event.target.value)}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <Label htmlFor="result-goal-owner">Responsável pela meta</Label>
+                <Select
+                  value={ownerUserId || "unassigned"}
+                  onValueChange={(value) => setOwnerUserId(value === "unassigned" ? "" : value)}
+                >
+                  <SelectTrigger id="result-goal-owner">
+                    <SelectValue placeholder="Definir depois" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unassigned">Definir depois</SelectItem>
+                    {(membersQ.data ?? []).map((member) => (
+                      <SelectItem key={member.userId} value={member.userId}>
+                        {member.fullName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <Label htmlFor="result-indicator-name">Indicador de atividade</Label>
+                <Input
+                  id="result-indicator-name"
+                  value={indicatorName}
+                  onChange={(event) => setIndicatorName(event.target.value)}
+                  placeholder="Ex.: Reuniões comerciais por semana"
+                  aria-describedby="result-indicator-help"
+                />
+                <p id="result-indicator-help" className="mt-1 text-xs text-muted-foreground">
+                  Prefira algo que a equipe controla, como reuniões, propostas ou tempo de resposta.
+                </p>
+              </div>
+              <div>
+                <Label htmlFor="result-indicator-target">Meta do indicador</Label>
+                <Input
+                  id="result-indicator-target"
+                  inputMode="decimal"
+                  value={indicatorTarget}
+                  onChange={(event) => setIndicatorTarget(event.target.value)}
+                  placeholder="Ex.: 80"
+                />
+              </div>
+              <div>
+                <Label htmlFor="result-indicator-current">Valor atual (opcional)</Label>
+                <Input
+                  id="result-indicator-current"
+                  inputMode="decimal"
+                  value={currentValue}
+                  onChange={(event) => setCurrentValue(event.target.value)}
+                  placeholder="Ex.: 55"
+                />
+              </div>
+              <div>
+                <Label htmlFor="result-indicator-unit">Unidade</Label>
+                <Input
+                  id="result-indicator-unit"
+                  value={indicatorUnit}
+                  onChange={(event) => setIndicatorUnit(event.target.value)}
+                  placeholder="Ex.: reuniões, %, R$"
+                />
+              </div>
+              <div>
+                <Label htmlFor="result-indicator-direction">O que representa melhora?</Label>
+                <Select
+                  value={direction}
+                  onValueChange={(value) => setDirection(value as typeof direction)}
+                >
+                  <SelectTrigger id="result-indicator-direction">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="higher_better">Quanto maior, melhor</SelectItem>
+                    <SelectItem value="lower_better">Quanto menor, melhor</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+
+          {submitError && (
+            <div
+              role="alert"
+              className="mt-5 rounded-xl border border-rose-500/30 bg-rose-500/5 p-3 text-sm text-rose-700 dark:text-rose-300"
+            >
+              <strong>Não foi possível salvar.</strong> {submitError}
+            </div>
+          )}
+
+          <div className="mt-6 flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-muted-foreground">
+              Você poderá editar e detalhar tudo depois em Metas do time.
+            </p>
+            <Button
+              type="submit"
+              disabled={!canSubmit || save.isPending}
+              className="min-w-44 gap-2"
+            >
+              {save.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Salvando
+                </>
+              ) : (
+                <>
+                  {stage === "indicator" ? "Concluir configuração" : "Salvar e continuar"}
+                  <ChevronRight className="h-4 w-4" />
+                </>
+              )}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </section>
+  );
+}
+
+async function createGoal(
+  orgId: string,
+  cycleId: string,
+  values: {
+    title: string;
+    measurable: string;
+    target: string;
+    dueAt: string;
+    ownerUserId: string;
+  },
+) {
+  return api<CreatedGoal>(`/organization/${orgId}/cycles/${cycleId}/goals`, {
+    method: "POST",
+    body: {
+      title: values.title.trim(),
+      specific: values.title.trim(),
+      measurable: values.measurable.trim(),
+      achievable: null,
+      relevant: null,
+      timeBound: values.dueAt,
+      targetValue: parseLocalizedNumber(values.target),
+      dueAt: new Date(`${values.dueAt}T12:00:00`).toISOString(),
+      ownerUserId: values.ownerUserId || null,
+      status: "on_track",
+    },
+  });
+}
+
+function parseLocalizedNumber(value: string) {
+  const normalized = value
+    .trim()
+    .replace(/\s/g, "")
+    .replace(/\.(?=\d{3}(?:\D|$))/g, "")
+    .replace(",", ".");
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed)) throw new Error("Informe um valor numérico válido.");
+  return parsed;
+}
+
+function toDateInput(date: Date) {
+  const offset = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 10);
 }
 
 function goalProgress(current: number | null, target: number | null) {
