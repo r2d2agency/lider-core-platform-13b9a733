@@ -11,6 +11,7 @@ import {
   Target,
   TrendingDown,
   TrendingUp,
+  Users,
   Wrench,
 } from "lucide-react";
 import { api } from "@/lib/api";
@@ -56,7 +57,40 @@ type Overview = {
     name: string;
     startAt: string;
     endAt: string;
-    goals: Array<{ id: string; title: string; status: GoalStatus; measurable: string | null }>;
+    goals: Array<{
+      id: string;
+      title: string;
+      status: GoalStatus;
+      measurable: string | null;
+      targetValue: number | null;
+      currentValue: number | null;
+      dueAt: string | null;
+      indicatorId: string | null;
+      ownerUserId: string | null;
+      actionItems: Array<{
+        id: string;
+        title: string;
+        status: "pending" | "in_progress" | "done";
+        dueAt: string | null;
+      }>;
+      breakdowns: Array<{
+        id: string;
+        memberLabel: string | null;
+        title: string;
+        targetValue: number | null;
+        currentValue: number | null;
+        status: GoalStatus;
+      }>;
+      teamReadiness: Array<{ id: string; actions: string[]; monthlyPlan: string | null }>;
+      cultureChecks: Array<{
+        id: string;
+        practicesCulture: number | null;
+        highPerformanceOrientation: number | null;
+        factBasedDecisions: number | null;
+        intellectualHonesty: number | null;
+        behaviorsAlignment: number | null;
+      }>;
+    }>;
   } | null;
 };
 
@@ -147,23 +181,42 @@ function ResultsPage() {
 
   return (
     <div className="space-y-8">
-      <header className="flex items-end justify-between gap-4">
-        <div>
-          <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
-            Resultado
+      <header className="rounded-3xl border border-border bg-card p-5 shadow-sm md:p-7">
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-rose-600">
+              Módulo Resultado · Alcançar metas
+            </div>
+            <h1 className="mt-2 font-display text-3xl md:text-4xl">Gestão à vista</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              Comece pelo que o time precisa entregar e acompanhe os sinais que antecipam o
+              resultado — antes do fim do ciclo.
+            </p>
           </div>
-          <h1 className="mt-1 font-display text-3xl">Gestão à vista</h1>
-          <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-            Um único painel para ver, sem rodeios, onde está no verde, onde precisa de atenção e o
-            que o ciclo atual promete entregar.
-          </p>
+          <Link
+            to="/app/indicators"
+            className="hidden shrink-0 items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium hover:bg-secondary md:inline-flex"
+          >
+            Gerenciar indicadores <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
         </div>
-        <Link
-          to="/app/indicators"
-          className="hidden shrink-0 items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium hover:bg-secondary md:inline-flex"
-        >
-          Gerenciar indicadores <ArrowRight className="h-3.5 w-3.5" />
-        </Link>
+        <ol className="mt-6 grid grid-cols-2 gap-2 border-t border-border pt-5 sm:grid-cols-3 lg:grid-cols-6">
+          {[
+            "Meta do time",
+            "Indicadores",
+            "Lacuna",
+            "Responsável",
+            "Plano de ação",
+            "Acompanhamento",
+          ].map((step, index) => (
+            <li key={step} className="flex items-center gap-2 text-xs font-medium">
+              <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-rose-500/10 text-[10px] font-bold text-rose-600">
+                {index + 1}
+              </span>
+              <span>{step}</span>
+            </li>
+          ))}
+        </ol>
       </header>
 
       <section className="grid gap-3 md:grid-cols-4">
@@ -362,34 +415,134 @@ function ResultsPage() {
             .
           </div>
         ) : (
-          <ul className="divide-y divide-border rounded-2xl border border-border bg-card">
-            {data.activeCycle.goals.map((g, idx) => {
-              const gm = GOAL_META[g.status];
-              return (
-                <li key={g.id} className="flex items-center gap-4 px-4 py-3">
-                  <span className="w-6 text-right font-display text-sm text-muted-foreground">
-                    {idx + 1}
-                  </span>
-                  <span className={"inline-block h-2 w-2 rounded-full " + gm.dot} />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium">{g.title}</div>
-                    {g.measurable && (
-                      <div className="truncate text-xs text-muted-foreground">
-                        M · {g.measurable}
+          <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
+            <ul className="divide-y divide-border rounded-2xl border border-border bg-card">
+              {data.activeCycle.goals.map((g, idx) => {
+                const gm = GOAL_META[g.status];
+                const progress = goalProgress(g.currentValue, g.targetValue);
+                const pendingActions = g.actionItems.filter((item) => item.status !== "done");
+                return (
+                  <li key={g.id} className="px-4 py-4">
+                    <div className="flex items-start gap-3">
+                      <span className="w-6 text-right font-display text-sm text-muted-foreground">
+                        {idx + 1}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={"inline-block h-2 w-2 rounded-full " + gm.dot} />
+                          <h3 className="text-sm font-semibold">{g.title}</h3>
+                          <span className={"text-[10px] uppercase tracking-widest " + gm.tone}>
+                            {gm.label}
+                          </span>
+                        </div>
+                        {g.measurable && (
+                          <p className="mt-1 text-xs text-muted-foreground">{g.measurable}</p>
+                        )}
+                        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-secondary">
+                          <div
+                            className="h-full rounded-full bg-rose-500 transition-[width]"
+                            style={{ width: `${progress}%` }}
+                            role="progressbar"
+                            aria-label={`Progresso de ${g.title}`}
+                            aria-valuemin={0}
+                            aria-valuemax={100}
+                            aria-valuenow={progress}
+                          />
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+                          <span className="tabular-nums">{progress}% realizado</span>
+                          <span>
+                            {g.indicatorId ? "Indicador vinculado" : "Sem indicador vinculado"}
+                          </span>
+                          <span>
+                            <Users className="mr-1 inline h-3 w-3" />
+                            {g.breakdowns.length} desdobramento(s)
+                          </span>
+                          <span>{pendingActions.length} ação(ões) aberta(s)</span>
+                        </div>
                       </div>
-                    )}
-                  </div>
-                  <span className={"text-[10px] uppercase tracking-widest " + gm.tone}>
-                    {gm.label}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+            <aside className="rounded-2xl border border-rose-500/20 bg-rose-500/[0.04] p-4">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-rose-600">
+                Agenda de ação do líder
+              </div>
+              <h3 className="mt-1 font-display text-lg">O que exige atuação agora</h3>
+              <ol className="mt-4 space-y-3">
+                {buildLeaderAgenda(data.activeCycle.goals).length === 0 ? (
+                  <li className="text-sm text-muted-foreground">
+                    Nenhum alerta crítico no ciclo. Continue acompanhando os indicadores.
+                  </li>
+                ) : (
+                  buildLeaderAgenda(data.activeCycle.goals).map((item, index) => (
+                    <li key={item} className="flex gap-3 text-sm leading-snug">
+                      <span className="font-display text-rose-600">{index + 1}</span>
+                      <span>{item}</span>
+                    </li>
+                  ))
+                )}
+              </ol>
+              <Link
+                to="/app/organization/cycles"
+                className="mt-5 inline-flex items-center gap-1.5 text-xs font-semibold text-rose-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                Abrir gestão das metas <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </aside>
+          </div>
         )}
       </section>
     </div>
   );
+}
+
+function goalProgress(current: number | null, target: number | null) {
+  if (current == null || target == null || target === 0) return 0;
+  return Math.max(0, Math.min(100, Math.round((current / target) * 100)));
+}
+
+function buildLeaderAgenda(goals: NonNullable<Overview["activeCycle"]>["goals"]) {
+  const items: string[] = [];
+  for (const goal of goals) {
+    if (items.length >= 5) break;
+    const progress = goalProgress(goal.currentValue, goal.targetValue);
+    const openActions = goal.actionItems.filter((item) => item.status !== "done");
+    const latestCulture = goal.cultureChecks[0];
+    const cultureScores = latestCulture
+      ? [
+          latestCulture.practicesCulture,
+          latestCulture.highPerformanceOrientation,
+          latestCulture.factBasedDecisions,
+          latestCulture.intellectualHonesty,
+          latestCulture.behaviorsAlignment,
+        ].filter((score): score is number => score != null)
+      : [];
+    const cultureAverage = cultureScores.length
+      ? cultureScores.reduce((sum, score) => sum + score, 0) / cultureScores.length
+      : null;
+
+    if (goal.status === "off_track" || goal.status === "at_risk") {
+      items.push(
+        `${goal.title}: ${progress}% realizado e ${GOAL_META[goal.status].label.toLowerCase()}.`,
+      );
+    } else if (!goal.indicatorId) {
+      items.push(`${goal.title}: vincule um indicador para antecipar desvios.`);
+    } else if (openActions.length > 0) {
+      items.push(
+        `${goal.title}: ${openActions.length} ação(ões) ainda precisam de acompanhamento.`,
+      );
+    } else if (goal.breakdowns.length === 0) {
+      items.push(`${goal.title}: desdobre a meta entre os responsáveis do time.`);
+    } else if (goal.teamReadiness.length === 0) {
+      items.push(`${goal.title}: registre se o time domina o método e tem preparo técnico.`);
+    } else if (cultureAverage != null && cultureAverage < 3) {
+      items.push(`${goal.title}: o radar de cultura indica um ponto de atenção.`);
+    }
+  }
+  return items.slice(0, 5);
 }
 
 function StatTile({

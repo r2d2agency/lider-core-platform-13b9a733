@@ -122,7 +122,8 @@ indicatorsRouter.post("/:orgId/indicators/:id/sync", async (req, res) => {
       where: { id: req.params.id, organizationId: req.params.orgId },
     });
     if (!ind) return res.status(404).json({ error: "Indicador não encontrado" });
-    if (!ind.csvSyncUrl) return res.status(400).json({ error: "Indicador sem URL de sincronização" });
+    if (!ind.csvSyncUrl)
+      return res.status(400).json({ error: "Indicador sem URL de sincronização" });
 
     const resp = await fetch(ind.csvSyncUrl, { redirect: "follow" });
     if (!resp.ok) return res.status(502).json({ error: `Falha ao baixar CSV (${resp.status})` });
@@ -133,20 +134,46 @@ indicatorsRouter.post("/:orgId/indicators/:id/sync", async (req, res) => {
     let imported = 0;
     let skipped = 0;
     for (const row of rows) {
-      const period = row["periodo"] ?? row["período"] ?? row["period"] ?? row["mes"] ?? row["month"];
+      const period =
+        row["periodo"] ?? row["período"] ?? row["period"] ?? row["mes"] ?? row["month"];
       const valueStr = row["valor"] ?? row["value"] ?? row["valor_realizado"];
-      if (!period || !valueStr) { skipped++; continue; }
+      if (!period || !valueStr) {
+        skipped++;
+        continue;
+      }
       const value = Number(String(valueStr).replace(",", "."));
-      if (!Number.isFinite(value)) { skipped++; continue; }
+      if (!Number.isFinite(value)) {
+        skipped++;
+        continue;
+      }
       const m = period.match(/(\d{4})[-/](\d{1,2})/) ?? period.match(/(\d{1,2})[-/](\d{4})/);
-      if (!m) { skipped++; continue; }
+      if (!m) {
+        skipped++;
+        continue;
+      }
       const y = Number(m[1].length === 4 ? m[1] : m[2]);
       const mo = Number(m[1].length === 4 ? m[2] : m[1]);
-      if (mo < 1 || mo > 12) { skipped++; continue; }
+      if (mo < 1 || mo > 12) {
+        skipped++;
+        continue;
+      }
       await prisma.indicatorReading.upsert({
-        where: { indicatorId_periodYear_periodMonth: { indicatorId: ind.id, periodYear: y, periodMonth: mo } },
+        where: {
+          indicatorId_periodYear_periodMonth: {
+            indicatorId: ind.id,
+            periodYear: y,
+            periodMonth: mo,
+          },
+        },
         update: { value, source: "csv", recordedBy: req.userId },
-        create: { indicatorId: ind.id, periodYear: y, periodMonth: mo, value, source: "csv", recordedBy: req.userId },
+        create: {
+          indicatorId: ind.id,
+          periodYear: y,
+          periodMonth: mo,
+          value,
+          source: "csv",
+          recordedBy: req.userId,
+        },
       });
       imported++;
     }
@@ -256,24 +283,38 @@ indicatorsRouter.post("/:orgId/indicators/import", async (req, res) => {
         const found = await prisma.indicator.findFirst({
           where: { organizationId: req.params.orgId, name: row.name, level },
         });
-        const created = found ?? (await prisma.indicator.create({
-          data: {
-            organizationId: req.params.orgId,
-            name: row.name,
-            level,
-            unit: row.unit ?? null,
-            target: row.target ? Number(String(row.target).replace(",", ".")) : null,
-            createdBy: req.userId,
-            updatedBy: req.userId,
-          },
-        }));
+        const created =
+          found ??
+          (await prisma.indicator.create({
+            data: {
+              organizationId: req.params.orgId,
+              name: row.name,
+              level,
+              unit: row.unit ?? null,
+              target: row.target ? Number(String(row.target).replace(",", ".")) : null,
+              createdBy: req.userId,
+              updatedBy: req.userId,
+            },
+          }));
         indicatorId = created.id;
       }
-      if (!indicatorId) { skipped++; continue; }
+      if (!indicatorId) {
+        skipped++;
+        continue;
+      }
       await prisma.indicatorReading.upsert({
-        where: { indicatorId_periodYear_periodMonth: { indicatorId, periodYear: year, periodMonth: month } },
+        where: {
+          indicatorId_periodYear_periodMonth: { indicatorId, periodYear: year, periodMonth: month },
+        },
         update: { value, source: "csv", recordedBy: req.userId },
-        create: { indicatorId, periodYear: year, periodMonth: month, value, source: "csv", recordedBy: req.userId },
+        create: {
+          indicatorId,
+          periodYear: year,
+          periodMonth: month,
+          value,
+          source: "csv",
+          recordedBy: req.userId,
+        },
       });
       imported++;
     }
@@ -303,7 +344,9 @@ indicatorsRouter.get("/:orgId/results/meta-vs-real", async (req, res) => {
     orderBy: { name: "asc" },
   });
   const indicatorIds = indicatorsRaw.map((i) => i.id);
-  const areaIds = Array.from(new Set(indicatorsRaw.map((i) => i.areaId).filter((v): v is string => !!v)));
+  const areaIds = Array.from(
+    new Set(indicatorsRaw.map((i) => i.areaId).filter((v): v is string => !!v)),
+  );
   const [readings, areas] = await Promise.all([
     prisma.indicatorReading.findMany({
       where: { indicatorId: { in: indicatorIds } },
@@ -323,7 +366,7 @@ indicatorsRouter.get("/:orgId/results/meta-vs-real", async (req, res) => {
   const indicators = indicatorsRaw.map((i) => ({
     ...i,
     readings: readingsByIndicator.get(i.id) ?? [],
-    area: i.areaId ? areaMap.get(i.areaId) ?? null : null,
+    area: i.areaId ? (areaMap.get(i.areaId) ?? null) : null,
   }));
 
   const rows = indicators
@@ -331,15 +374,17 @@ indicatorsRouter.get("/:orgId/results/meta-vs-real", async (req, res) => {
       const last = i.readings[0];
       if (!last || i.target == null) return null;
       const dir = (i.direction === "lower_better" ? "lower_better" : "higher_better") as
-        | "higher_better"
-        | "lower_better";
+        "higher_better" | "lower_better";
       const target = i.target;
       const gap = (last.value - target) / Math.max(Math.abs(target), 1);
       const signedGap = dir === "higher_better" ? gap : -gap; // <0 = fora
       const absGap = Math.abs(gap);
       const isOn = dir === "higher_better" ? last.value >= target : last.value <= target;
-      const status: "on_target" | "warning" | "off_target" =
-        isOn ? "on_target" : absGap <= 0.1 ? "warning" : "off_target";
+      const status: "on_target" | "warning" | "off_target" = isOn
+        ? "on_target"
+        : absGap <= 0.1
+          ? "warning"
+          : "off_target";
 
       // classificação
       const history = i.readings.slice().reverse(); // asc
@@ -428,7 +473,19 @@ indicatorsRouter.get("/:orgId/results-overview", async (req, res) => {
     prisma.cycle.findFirst({
       where: { organizationId: orgId, status: "active" },
       orderBy: { startAt: "desc" },
-      include: { goals: true },
+      include: {
+        goals: {
+          include: {
+            actionItems: { orderBy: [{ status: "asc" }, { dueAt: "asc" }] },
+            breakdowns: { orderBy: { createdAt: "asc" } },
+            teamReadiness: {
+              orderBy: [{ periodYear: "desc" }, { periodMonth: "desc" }],
+              take: 1,
+            },
+            cultureChecks: { orderBy: { createdAt: "desc" }, take: 1 },
+          },
+        },
+      },
     }),
   ]);
 
@@ -472,7 +529,13 @@ indicatorsRouter.get("/:orgId/results-overview", async (req, res) => {
   );
 
   const goalsRanked = (activeCycle?.goals ?? []).slice().sort((a, b) => {
-    const order: Record<string, number> = { off_track: 0, at_risk: 1, on_track: 2, done: 3, dropped: 4 };
+    const order: Record<string, number> = {
+      off_track: 0,
+      at_risk: 1,
+      on_track: 2,
+      done: 3,
+      dropped: 4,
+    };
     return (order[a.status] ?? 9) - (order[b.status] ?? 9);
   });
 
@@ -529,8 +592,7 @@ function withStatus(i: IndicatorWithReadings) {
   const prev = i.readings[1] ?? null;
   let status: "on_target" | "off_target" | "warning" | "unknown" = "unknown";
   if (last && i.target != null) {
-    const on =
-      i.direction === "higher_better" ? last.value >= i.target : last.value <= i.target;
+    const on = i.direction === "higher_better" ? last.value >= i.target : last.value <= i.target;
     if (on) status = "on_target";
     else {
       // dentro de 10% ainda é warning
@@ -549,7 +611,9 @@ export async function computeIndicatorSignals(orgId: string) {
   const [indicators, concentration] = await Promise.all([
     prisma.indicator.findMany({
       where: { organizationId: orgId, active: true, target: { not: null } },
-      include: { readings: { orderBy: [{ periodYear: "desc" }, { periodMonth: "desc" }], take: 2 } },
+      include: {
+        readings: { orderBy: [{ periodYear: "desc" }, { periodMonth: "desc" }], take: 2 },
+      },
     }),
     computeConcentration(orgId),
   ]);
@@ -607,17 +671,20 @@ function evalStatus(
 
 async function maybeNotifyOffTarget(
   indicator: {
-    id: string; name: string; unit: string | null;
-    target: number | null; direction: string;
-    ownerUserId: string | null; organizationId: string;
+    id: string;
+    name: string;
+    unit: string | null;
+    target: number | null;
+    direction: string;
+    ownerUserId: string | null;
+    organizationId: string;
     readings: Array<{ value: number; periodYear: number; periodMonth: number }>;
   },
   newValue: number,
   orgId: string,
 ) {
   const dir = (indicator.direction === "lower_better" ? "lower_better" : "higher_better") as
-    | "higher_better"
-    | "lower_better";
+    "higher_better" | "lower_better";
   const prev = indicator.readings[0]?.value ?? null;
   const prevStatus = evalStatus(indicator.target, dir, prev);
   const nextStatus = evalStatus(indicator.target, dir, newValue);
