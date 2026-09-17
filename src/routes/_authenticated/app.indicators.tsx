@@ -119,22 +119,23 @@ function IndicatorsPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-8">
-      <header className="flex flex-wrap items-end justify-between gap-4">
+      <header className="grid gap-5 lg:grid-cols-[1fr_auto] lg:items-end">
         <div>
           <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-muted-foreground">
-            <BarChart3 className="h-3.5 w-3.5" style={{ color: 'var(--pilar-r)' }} /> Módulo Resultado
+            <BarChart3 className="h-3.5 w-3.5" style={{ color: "var(--pilar-r)" }} /> Módulo
+            Resultado
           </div>
           <h1 className="mt-1 font-display text-4xl">Indicadores</h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-            Fatos, não impressão. Cadastre indicadores em três níveis e registre leituras
-            mensais — o sistema lê o farol e sinaliza fora da meta e carga na própria mão.
+            Fatos, não impressão. Cadastre indicadores em três níveis e registre leituras mensais —
+            o sistema lê o farol e sinaliza fora da meta e carga na própria mão.
           </p>
         </div>
-        <div className="flex gap-2">
-          <ImportCsvDialog orgId={orgId} />
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap lg:justify-end">
+          <ImportCsvDialog orgId={orgId} triggerClassName="w-full sm:w-auto" />
           <Button
             variant="outline"
-            className="gap-1"
+            className="min-w-0 gap-1 px-3 sm:w-auto"
             disabled={!list.data?.length}
             onClick={() =>
               exportCsv(
@@ -147,8 +148,19 @@ function IndicatorsPage() {
                   { key: "direction", label: "Direção" },
                   { key: "target", label: "Meta" },
                   { key: "status", label: "Farol" },
-                  { key: "lastValue", label: "Última leitura", get: (i) => i.lastReading?.value ?? "" },
-                  { key: "lastPeriod", label: "Período", get: (i) => i.lastReading ? `${String(i.lastReading.periodMonth).padStart(2, "0")}/${i.lastReading.periodYear}` : "" },
+                  {
+                    key: "lastValue",
+                    label: "Última leitura",
+                    get: (i) => i.lastReading?.value ?? "",
+                  },
+                  {
+                    key: "lastPeriod",
+                    label: "Período",
+                    get: (i) =>
+                      i.lastReading
+                        ? `${String(i.lastReading.periodMonth).padStart(2, "0")}/${i.lastReading.periodYear}`
+                        : "",
+                  },
                   { key: "delta", label: "Delta vs anterior", get: (i) => i.delta ?? "" },
                 ],
               )
@@ -156,30 +168,55 @@ function IndicatorsPage() {
           >
             <Download className="h-3.5 w-3.5" /> Exportar CSV
           </Button>
-          <NewIndicatorDialog orgId={orgId} defaultLevel={level} />
+          <NewIndicatorDialog
+            orgId={orgId}
+            defaultLevel={level}
+            triggerClassName="col-span-2 w-full sm:col-span-1 sm:w-auto"
+          />
         </div>
       </header>
 
       <ConcentrationCard data={concentration.data} />
 
-      <nav className="flex flex-wrap gap-1 border-b border-border">
-        {LEVELS.map((l) => (
-          <button
-            key={l.key}
-            type="button"
-            onClick={() => setLevel(l.key)}
-            className={
-              "border-b-2 px-4 py-2.5 text-sm transition-colors " +
-              (level === l.key
-                ? "border-foreground text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground")
-            }
-          >
-            <span className="font-medium">{l.label}</span>
-            <span className="ml-2 text-xs text-muted-foreground">{l.hint}</span>
-          </button>
-        ))}
-      </nav>
+      <div>
+        <div className="mb-2">
+          <h2 className="text-sm font-semibold">Nível do indicador</h2>
+          <p className="text-xs text-muted-foreground">
+            Escolha onde o indicador atua: no resultado da área, na dinâmica da equipe ou na prática
+            de liderança.
+          </p>
+        </div>
+        <nav
+          aria-label="Nível do indicador"
+          className="grid grid-cols-3 gap-1.5 rounded-2xl bg-secondary/70 p-1.5"
+        >
+          {LEVELS.map((l) => (
+            <button
+              key={l.key}
+              type="button"
+              onClick={() => setLevel(l.key)}
+              className={
+                "min-w-0 rounded-xl border px-2 py-2.5 text-center text-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring " +
+                (level === l.key
+                  ? "border-border bg-card font-semibold text-foreground shadow-sm"
+                  : "border-transparent text-muted-foreground hover:bg-card/60 hover:text-foreground")
+              }
+              aria-pressed={level === l.key}
+            >
+              <span className="block truncate">{l.label}</span>
+              <span className="mt-0.5 hidden truncate text-[10px] font-normal text-muted-foreground md:block">
+                {l.hint}
+              </span>
+            </button>
+          ))}
+        </nav>
+        <p className="mt-2 px-1 text-xs text-muted-foreground md:hidden">
+          <strong className="font-semibold text-foreground">
+            {LEVELS.find((item) => item.key === level)?.label}:
+          </strong>{" "}
+          {LEVELS.find((item) => item.key === level)?.hint}.
+        </p>
+      </div>
 
       {list.isLoading ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -206,9 +243,7 @@ function ConcentrationCard({ data }: { data: Concentration | undefined }) {
     <div
       className={
         "rounded-2xl border p-5 " +
-        (anyRisk
-          ? "border-accent/40 bg-accent/5"
-          : "border-success/30 bg-success/5")
+        (anyRisk ? "border-accent/40 bg-accent/5" : "border-success/30 bg-success/5")
       }
     >
       <div className="flex items-start gap-3">
@@ -236,8 +271,13 @@ function ConcentrationCard({ data }: { data: Concentration | undefined }) {
           {anyRisk && (
             <ul className="mt-3 grid gap-1.5 text-sm">
               {over.slice(0, 5).map((l) => (
-                <li key={l.leaderId} className="flex justify-between rounded-md bg-background/60 px-3 py-1.5">
-                  <span className="text-muted-foreground">líder <code className="text-foreground">{l.leaderId.slice(0, 8)}</code></span>
+                <li
+                  key={l.leaderId}
+                  className="flex justify-between rounded-md bg-background/60 px-3 py-1.5"
+                >
+                  <span className="text-muted-foreground">
+                    líder <code className="text-foreground">{l.leaderId.slice(0, 8)}</code>
+                  </span>
                   <span className="font-medium">
                     {Math.round(l.ratio * 100)}% ({l.ownedByLeader}/{l.total})
                   </span>
@@ -269,19 +309,19 @@ function IndicatorCard({ orgId, indicator }: { orgId: string; indicator: Indicat
     indicator.status === "on_target"
       ? "border-success/40 bg-success/5"
       : indicator.status === "warning"
-      ? "border-warning/40 bg-warning/5"
-      : indicator.status === "off_target"
-      ? "border-destructive/40 bg-destructive/5"
-      : "border-border";
+        ? "border-warning/40 bg-warning/5"
+        : indicator.status === "off_target"
+          ? "border-destructive/40 bg-destructive/5"
+          : "border-border";
 
   const statusLabel =
     indicator.status === "on_target"
       ? "Dentro da meta"
       : indicator.status === "warning"
-      ? "Perto do limite"
-      : indicator.status === "off_target"
-      ? "Fora da meta"
-      : "Sem leitura";
+        ? "Perto do limite"
+        : indicator.status === "off_target"
+          ? "Fora da meta"
+          : "Sem leitura";
 
   return (
     <div className={"rounded-2xl border p-5 " + statusStyle}>
@@ -290,7 +330,11 @@ function IndicatorCard({ orgId, indicator }: { orgId: string; indicator: Indicat
           <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-muted-foreground">
             <span>{statusLabel}</span>
             <span>•</span>
-            <span>{indicator.direction === "higher_better" ? "quanto mais, melhor" : "quanto menos, melhor"}</span>
+            <span>
+              {indicator.direction === "higher_better"
+                ? "quanto mais, melhor"
+                : "quanto menos, melhor"}
+            </span>
           </div>
           <h3 className="mt-1 truncate font-display text-lg">{indicator.name}</h3>
           {indicator.description && (
@@ -348,17 +392,43 @@ function IndicatorCard({ orgId, indicator }: { orgId: string; indicator: Indicat
       </div>
 
       <Sparkline readings={indicator.readings} />
-      {indicator.lastReading && (indicator.lastReading.plan || indicator.lastReading.doAction || indicator.lastReading.check || indicator.lastReading.act) && (
-        <div className="mt-4 rounded-xl border border-border/70 bg-background/60 p-3">
-          <div className="text-[10px] uppercase tracking-widest text-muted-foreground">PDCA da última leitura</div>
-          <dl className="mt-2 grid gap-1.5 text-xs">
-            {indicator.lastReading.plan && (<div className="flex gap-2"><dt className="w-4 font-semibold text-accent">P</dt><dd className="text-foreground/80">{indicator.lastReading.plan}</dd></div>)}
-            {indicator.lastReading.doAction && (<div className="flex gap-2"><dt className="w-4 font-semibold text-accent">D</dt><dd className="text-foreground/80">{indicator.lastReading.doAction}</dd></div>)}
-            {indicator.lastReading.check && (<div className="flex gap-2"><dt className="w-4 font-semibold text-accent">C</dt><dd className="text-foreground/80">{indicator.lastReading.check}</dd></div>)}
-            {indicator.lastReading.act && (<div className="flex gap-2"><dt className="w-4 font-semibold text-accent">A</dt><dd className="text-foreground/80">{indicator.lastReading.act}</dd></div>)}
-          </dl>
-        </div>
-      )}
+      {indicator.lastReading &&
+        (indicator.lastReading.plan ||
+          indicator.lastReading.doAction ||
+          indicator.lastReading.check ||
+          indicator.lastReading.act) && (
+          <div className="mt-4 rounded-xl border border-border/70 bg-background/60 p-3">
+            <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+              PDCA da última leitura
+            </div>
+            <dl className="mt-2 grid gap-1.5 text-xs">
+              {indicator.lastReading.plan && (
+                <div className="flex gap-2">
+                  <dt className="w-4 font-semibold text-accent">P</dt>
+                  <dd className="text-foreground/80">{indicator.lastReading.plan}</dd>
+                </div>
+              )}
+              {indicator.lastReading.doAction && (
+                <div className="flex gap-2">
+                  <dt className="w-4 font-semibold text-accent">D</dt>
+                  <dd className="text-foreground/80">{indicator.lastReading.doAction}</dd>
+                </div>
+              )}
+              {indicator.lastReading.check && (
+                <div className="flex gap-2">
+                  <dt className="w-4 font-semibold text-accent">C</dt>
+                  <dd className="text-foreground/80">{indicator.lastReading.check}</dd>
+                </div>
+              )}
+              {indicator.lastReading.act && (
+                <div className="flex gap-2">
+                  <dt className="w-4 font-semibold text-accent">A</dt>
+                  <dd className="text-foreground/80">{indicator.lastReading.act}</dd>
+                </div>
+              )}
+            </dl>
+          </div>
+        )}
 
       <div className="mt-4 flex justify-end">
         <Dialog open={openReading} onOpenChange={setOpenReading}>
@@ -378,15 +448,7 @@ function IndicatorCard({ orgId, indicator }: { orgId: string; indicator: Indicat
   );
 }
 
-function Metric({
-  label,
-  value,
-  hint,
-}: {
-  label: string;
-  value: React.ReactNode;
-  hint?: string;
-}) {
+function Metric({ label, value, hint }: { label: string; value: React.ReactNode; hint?: string }) {
   return (
     <div className="rounded-lg border border-border bg-background/60 p-3">
       <div className="text-[10px] uppercase tracking-widest text-muted-foreground">{label}</div>
@@ -412,9 +474,7 @@ function Sparkline({ readings }: { readings: Reading[] }) {
   const w = 260;
   const h = 40;
   const step = w / (sorted.length - 1);
-  const points = sorted
-    .map((r, i) => `${i * step},${h - ((r.value - min) / range) * h}`)
-    .join(" ");
+  const points = sorted.map((r, i) => `${i * step},${h - ((r.value - min) / range) * h}`).join(" ");
   return (
     <div className="mt-4">
       <svg viewBox={`0 0 ${w} ${h}`} className="w-full text-foreground/70">
@@ -505,12 +565,11 @@ function NewReadingContent({
           </div>
         </div>
         <div className="space-y-1.5">
-          <Label>Valor {indicator.unit && <span className="text-muted-foreground">({indicator.unit})</span>}</Label>
-          <Input
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            placeholder="Ex.: 87.5"
-          />
+          <Label>
+            Valor{" "}
+            {indicator.unit && <span className="text-muted-foreground">({indicator.unit})</span>}
+          </Label>
+          <Input value={value} onChange={(e) => setValue(e.target.value)} placeholder="Ex.: 87.5" />
         </div>
         <div className="space-y-1.5">
           <Label>Notas (opcional)</Label>
@@ -530,29 +589,54 @@ function NewReadingContent({
         {showPdca && (
           <div className="grid gap-3 rounded-xl border border-dashed border-border p-3">
             <div className="space-y-1.5">
-              <Label className="text-[11px] uppercase tracking-widest text-muted-foreground">P · Plan — o que planejou</Label>
-              <Textarea rows={2} value={plan} onChange={(e) => setPlan(e.target.value)} placeholder="Hipótese e plano de ação" />
+              <Label className="text-[11px] uppercase tracking-widest text-muted-foreground">
+                P · Plan — o que planejou
+              </Label>
+              <Textarea
+                rows={2}
+                value={plan}
+                onChange={(e) => setPlan(e.target.value)}
+                placeholder="Hipótese e plano de ação"
+              />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-[11px] uppercase tracking-widest text-muted-foreground">D · Do — o que executou</Label>
-              <Textarea rows={2} value={doAction} onChange={(e) => setDoAction(e.target.value)} placeholder="Ações reais no período" />
+              <Label className="text-[11px] uppercase tracking-widest text-muted-foreground">
+                D · Do — o que executou
+              </Label>
+              <Textarea
+                rows={2}
+                value={doAction}
+                onChange={(e) => setDoAction(e.target.value)}
+                placeholder="Ações reais no período"
+              />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-[11px] uppercase tracking-widest text-muted-foreground">C · Check — o que aprendeu</Label>
-              <Textarea rows={2} value={check} onChange={(e) => setCheck(e.target.value)} placeholder="Resultado vs. planejado" />
+              <Label className="text-[11px] uppercase tracking-widest text-muted-foreground">
+                C · Check — o que aprendeu
+              </Label>
+              <Textarea
+                rows={2}
+                value={check}
+                onChange={(e) => setCheck(e.target.value)}
+                placeholder="Resultado vs. planejado"
+              />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-[11px] uppercase tracking-widest text-muted-foreground">A · Act — o que muda agora</Label>
-              <Textarea rows={2} value={act} onChange={(e) => setAct(e.target.value)} placeholder="Ajuste para o próximo ciclo" />
+              <Label className="text-[11px] uppercase tracking-widest text-muted-foreground">
+                A · Act — o que muda agora
+              </Label>
+              <Textarea
+                rows={2}
+                value={act}
+                onChange={(e) => setAct(e.target.value)}
+                placeholder="Ajuste para o próximo ciclo"
+              />
             </div>
           </div>
         )}
       </div>
       <DialogFooter>
-        <Button
-          onClick={() => create.mutate()}
-          disabled={!value || create.isPending}
-        >
+        <Button onClick={() => create.mutate()} disabled={!value || create.isPending}>
           {create.isPending ? "Salvando…" : "Salvar leitura"}
         </Button>
       </DialogFooter>
@@ -563,9 +647,11 @@ function NewReadingContent({
 function NewIndicatorDialog({
   orgId,
   defaultLevel,
+  triggerClassName,
 }: {
   orgId: string;
   defaultLevel: "area" | "team" | "leadership";
+  triggerClassName?: string;
 }) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -603,7 +689,7 @@ function NewIndicatorDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button>
+        <Button className={triggerClassName}>
           <Plus className="mr-1 h-4 w-4" /> Novo indicador
         </Button>
       </DialogTrigger>
@@ -690,7 +776,13 @@ function NewIndicatorDialog({
   );
 }
 
-function ImportCsvDialog({ orgId }: { orgId: string }) {
+function ImportCsvDialog({
+  orgId,
+  triggerClassName,
+}: {
+  orgId: string;
+  triggerClassName?: string;
+}) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [csv, setCsv] = useState("");
@@ -713,7 +805,7 @@ function ImportCsvDialog({ orgId }: { orgId: string }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline">
+        <Button variant="outline" className={triggerClassName}>
           <Upload className="mr-1 h-4 w-4" /> Importar CSV
         </Button>
       </DialogTrigger>
@@ -723,14 +815,16 @@ function ImportCsvDialog({ orgId }: { orgId: string }) {
         </DialogHeader>
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Colunas aceitas: <code>name,level,unit,target,year,month,value</code> — cria o
-            indicador se não existir. Ou <code>indicatorId,year,month,value</code> para adicionar
-            leituras em indicadores já existentes.
+            Colunas aceitas: <code>name,level,unit,target,year,month,value</code> — cria o indicador
+            se não existir. Ou <code>indicatorId,year,month,value</code> para adicionar leituras em
+            indicadores já existentes.
           </p>
           <Textarea
             value={csv}
             onChange={(e) => setCsv(e.target.value)}
-            placeholder={"name,level,unit,target,year,month,value\nAderência a prazo,area,%,95,2026,7,88\n..."}
+            placeholder={
+              "name,level,unit,target,year,month,value\nAderência a prazo,area,%,95,2026,7,88\n..."
+            }
             className="min-h-[220px] font-mono text-xs"
           />
         </div>
@@ -744,13 +838,7 @@ function ImportCsvDialog({ orgId }: { orgId: string }) {
   );
 }
 
-function EmptyLevel({
-  level,
-  orgId,
-}: {
-  level: "area" | "team" | "leadership";
-  orgId: string;
-}) {
+function EmptyLevel({ level, orgId }: { level: "area" | "team" | "leadership"; orgId: string }) {
   const meta = LEVELS.find((l) => l.key === level)!;
   return (
     <div className="rounded-2xl border border-dashed border-border p-10 text-center">
@@ -772,4 +860,3 @@ function fmt(n: number) {
   if (abs >= 1000) return n.toLocaleString("pt-BR", { maximumFractionDigits: 0 });
   return n.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
 }
-

@@ -248,7 +248,7 @@ function sectionColor(section: string) {
 const productModuleTabs = [
   { module: "consciencia", section: "Consciência", to: "/app/consciencia" },
   { module: "organizacao", section: "Organização", to: "/app/organization" },
-  { module: "resultado", section: "Resultado", to: "/app/indicators" },
+  { module: "resultado", section: "Resultado", to: "/app/results" },
   { module: "evolucao", section: "Evolução", to: "/app/evolution" },
 ] as const;
 
