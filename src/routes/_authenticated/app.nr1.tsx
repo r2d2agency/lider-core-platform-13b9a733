@@ -59,8 +59,28 @@ type Survey = {
   actionPlan: string | null;
   createdAt: string;
 };
-type Tabulation = { id: string; label: string; avg: number | null; count: number };
-type SurveyDetail = Survey & { tabulation: Tabulation[] };
+type Tabulation = {
+  id: string;
+  label: string;
+  factors?: string[];
+  average: number | null;
+  percent: number | null;
+  validCount: number;
+};
+type FactorResult = {
+  id: string;
+  name: string;
+  average: number | null;
+  percent: number | null;
+  validCount: number;
+  classification: "muito_favoravel" | "atencao" | "prioridade" | null;
+};
+type SurveyDetail = Survey & {
+  tabulation: Tabulation[];
+  factors: FactorResult[];
+  resultAvailable: boolean;
+  insufficientMessage: string | null;
+};
 type AIAnalysis = {
   summary: string;
   priorities: Array<{ factor: string; evidence: string; recommendation: string }>;
@@ -511,6 +531,7 @@ function SurveyDetailDialog({
   });
 
   const t = detail.data?.tabulation ?? [];
+  const factors = detail.data?.factors ?? [];
 
   return (
     <DialogContent className="flex max-h-[92vh] flex-col overflow-hidden sm:max-w-xl">
@@ -524,32 +545,86 @@ function SurveyDetailDialog({
       <div className="flex-1 space-y-4 overflow-y-auto pr-1">
         {detail.isLoading ? (
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        ) : t.every((x) => x.count === 0) ? (
+        ) : !detail.data?.resultAvailable ? (
           <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-            Ainda sem respostas.
+            {detail.data?.insufficientMessage ?? "Ainda sem respostas."}
           </div>
         ) : (
-          <ul className="space-y-2.5">
-            {t.map((q) => (
-              <li key={q.id}>
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-foreground/90">{q.label}</span>
-                  <span className="font-semibold">
-                    {q.avg != null ? `${q.avg.toFixed(1)}/5` : "—"}
-                  </span>
-                </div>
-                <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                  <div
-                    className={`h-full rounded-full ${q.avg != null && q.avg < 3 ? "bg-rose-500" : "bg-emerald-500"}`}
-                    style={{ width: `${((q.avg ?? 0) / 5) * 100}%` }}
-                  />
-                </div>
-              </li>
-            ))}
-          </ul>
+          <>
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold">Fatores psicossociais</h3>
+              {factors.map((factor) => {
+                const tone =
+                  factor.classification === "prioridade"
+                    ? "border-rose-300 bg-rose-500/5"
+                    : factor.classification === "atencao"
+                      ? "border-amber-300 bg-amber-500/5"
+                      : "border-emerald-300 bg-emerald-500/5";
+                const label =
+                  factor.classification === "prioridade"
+                    ? "Prioridade"
+                    : factor.classification === "atencao"
+                      ? "Atenção"
+                      : factor.classification === "muito_favoravel"
+                        ? "Muito favorável"
+                        : "Sem dados";
+                return (
+                  <div key={factor.id} className={`rounded-xl border p-3 ${tone}`}>
+                    <div className="flex items-start justify-between gap-3 text-xs">
+                      <span className="font-medium text-foreground/90">{factor.name}</span>
+                      <span className="shrink-0 font-semibold">
+                        {factor.percent != null ? `${factor.percent.toFixed(1)}%` : "—"} · {label}
+                      </span>
+                    </div>
+                    <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                      <div
+                        className={`h-full rounded-full ${
+                          factor.classification === "prioridade"
+                            ? "bg-rose-500"
+                            : factor.classification === "atencao"
+                              ? "bg-amber-500"
+                              : "bg-emerald-500"
+                        }`}
+                        style={{ width: `${factor.percent ?? 0}%` }}
+                      />
+                    </div>
+                    {factor.average != null && (
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        Média {factor.average.toFixed(2)}/5 · {factor.validCount} respostas válidas
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <details className="rounded-xl border border-border p-3">
+              <summary className="cursor-pointer text-sm font-semibold">Detalhamento das 33 perguntas</summary>
+              <ul className="mt-3 space-y-2.5">
+                {t.map((q) => (
+                  <li key={q.id}>
+                    <div className="flex items-center justify-between gap-3 text-xs">
+                      <span className="text-foreground/90">{q.label}</span>
+                      <span className="shrink-0 font-semibold">
+                        {q.percent != null ? `${q.percent.toFixed(1)}%` : "—"}
+                      </span>
+                    </div>
+                    <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                      <div
+                        className={`h-full rounded-full ${q.percent != null && q.percent < 50 ? "bg-rose-500" : q.percent != null && q.percent < 75 ? "bg-amber-500" : "bg-emerald-500"}`}
+                        style={{ width: `${q.percent ?? 0}%` }}
+                      />
+                    </div>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      {q.average != null ? `Média ${q.average.toFixed(2)}/5` : "Sem respostas válidas"} · {q.validCount} respostas · fatores: {q.factors?.join(", ")}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          </>
         )}
 
-        {t.some((item) => item.count > 0) && (
+        {detail.data?.resultAvailable && (
           <div className="rounded-xl border border-violet-200/70 bg-violet-500/5 p-4 dark:border-violet-500/25">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>

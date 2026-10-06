@@ -5,6 +5,16 @@ import { prisma } from "../prisma.js";
 import { requireAuth } from "../auth.js";
 import { notifyInApp } from "../lib/notifications.js";
 import { completeChat } from "../lib/ai-gateway.js";
+import {
+  NR1_FACTORS,
+  NR1_MIN_RESPONSES,
+  NR1_QUESTIONS,
+  NR1_QUESTION_IDS,
+  nr1FactorResults,
+  nr1Message,
+  nr1QuestionTabulation,
+  type NR1Answers,
+} from "../lib/nr1-instrument.js";
 
 /**
  * NR-1 — Diagnóstico de riscos psicossociais + canal de denúncia anônima
@@ -17,17 +27,7 @@ import { completeChat } from "../lib/ai-gateway.js";
  * time inteiro, pra não expor o denunciante nem rotear pro possível alvo.
  */
 
-export const QUESTIONS = [
-  { id: "carga", label: "Minha carga de trabalho é adequada para o tempo que tenho." },
-  { id: "autonomia", label: "Tenho autonomia para tomar decisões no meu trabalho." },
-  { id: "seguranca_psicologica", label: "Posso expressar minhas opiniões sem medo de retaliação." },
-  { id: "relacoes", label: "As relações com colegas e liderança são respeitosas." },
-  { id: "reconhecimento", label: "Recebo reconhecimento adequado pelo meu trabalho." },
-  { id: "clareza", label: "Tenho clareza sobre o que se espera de mim." },
-  { id: "suporte_lideranca", label: "Minha liderança me apoia quando preciso." },
-  { id: "equilibrio", label: "Consigo equilibrar vida pessoal e trabalho." },
-] as const;
-const QUESTION_IDS = QUESTIONS.map((q) => q.id);
+export const QUESTIONS = NR1_QUESTIONS;
 
 function genToken() {
   return randomBytes(24).toString("base64url");
@@ -131,13 +131,9 @@ nr1Router.get("/:orgId/nr1/surveys/:id", async (req, res) => {
   });
   if (!s) return res.status(404).json({ error: "Pesquisa não encontrada" });
 
-  const tabulation = QUESTIONS.map((q) => {
-    const values = s.responses
-      .map((r) => (r.answers as Record<string, number>)[q.id])
-      .filter((v): v is number => typeof v === "number");
-    const avg = values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
-    return { id: q.id, label: q.label, avg, count: values.length };
-  });
+  const answersList = s.responses.map((r) => r.answers as NR1Answers);
+  // Marco 3.5 — resultados só com o mínimo de respostas válidas (anonimato).
+  const insufficient = s.responses.length < NR1_MIN_RESPONSES;
 
   res.json({
     ...s,
@@ -146,7 +142,10 @@ nr1Router.get("/:orgId/nr1/surveys/:id", async (req, res) => {
       riskScore: r.riskScore,
       createdAt: r.createdAt,
     })),
-    tabulation,
+    tabulation: nr1QuestionTabulation(answersList),
+    factors: insufficient ? [] : nr1FactorResults(answersList),
+    resultAvailable: !insufficient,
+    insufficientMessage: insufficient ? nr1Message("insufficient") : null,
   });
 });
 
@@ -174,16 +173,9 @@ nr1Router.post("/:orgId/nr1/surveys/:id/ai-analysis", async (req, res) => {
     });
   }
 
-  const tabulation = QUESTIONS.map((question) => {
-    const values = survey.responses
-      .map((response) => (response.answers as Record<string, number>)[question.id])
-      .filter((value): value is number => typeof value === "number");
-    return {
-      factor: question.label,
-      average: values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null,
-      responses: values.length,
-    };
-  });
+  const answersList = survey.responses.map((r) => r.answers as NR1Answers);
+  const factorResults = nr1FactorResults(answersList);
+  const tabulation = nr1QuestionTabulation(answersList);
 
   try {
     const raw = await completeChat({
@@ -201,8 +193,9 @@ nr1Router.post("/:orgId/nr1/surveys/:id/ai-analysis", async (req, res) => {
           content: JSON.stringify({
             survey: survey.title,
             responseCount: survey.responses.length,
-            scale: "1 a 5; menor nota representa maior atenção",
-            aggregatedResults: tabulation,
+            scale: "1 a 5; percentual = ((média − 1) ÷ 4) × 100; menor percentual representa maior atenção",
+            aggregatedResults: factorResults,
+            questionResults: tabulation,
             availableAssessments: [
               {
                 id: "completo",
@@ -336,10 +329,13 @@ publicNr1Router.get("/nr1/survey/:token", async (req, res) => {
   const s = await prisma.nR1Survey.findUnique({ where: { token: req.params.token } });
   if (!s || s.status !== "open")
     return res.status(404).json({ error: "Pesquisa não encontrada ou encerrada." });
-  res.json({ title: s.title, questions: QUESTIONS });
+  res.json({ title: s.title, questions: QUESTIONS, factors: NR1_FACTORS });
 });
 
-const answerSchema = z.object({ answers: z.record(z.string(), z.number().min(1).max(5)) });
+// Escala 1–5 + N/A (Marco 3.4). N/A não entra no cálculo dos fatores.
+const answerSchema = z.object({
+  answers: z.record(z.string(), z.union([z.number().min(1).max(5), z.literal("na")])),
+});
 
 publicNr1Router.post("/nr1/survey/:token/answer", async (req, res) => {
   try {
@@ -348,10 +344,10 @@ publicNr1Router.post("/nr1/survey/:token/answer", async (req, res) => {
       return res.status(404).json({ error: "Pesquisa não encontrada ou encerrada." });
 
     const data = answerSchema.parse(req.body);
-    const values = QUESTION_IDS.map((id) => data.answers[id]).filter(
+    const values = NR1_QUESTION_IDS.map((id) => data.answers[id]).filter(
       (v): v is number => typeof v === "number",
     );
-    if (values.length === 0) return badReq(res, new Error("Responda ao menos uma pergunta."));
+    if (values.length === 0) return badReq(res, new Error("Responda ao menos uma pergunta válida."));
     const riskScore = values.reduce((a, b) => a + b, 0) / values.length;
 
     await prisma.nR1Response.create({

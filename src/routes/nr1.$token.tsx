@@ -16,13 +16,14 @@ export const Route = createFileRoute("/nr1/$token")({
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "";
 
 type Question = { id: string; label: string };
+type Answer = number | "na";
 type Payload = { title: string; questions: Question[] };
 
 function PublicNR1Page() {
   const { token } = Route.useParams();
   const [data, setData] = useState<Payload | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [answers, setAnswers] = useState<Record<string, number>>({});
+  const [answers, setAnswers] = useState<Record<string, Answer>>({});
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
 
@@ -45,7 +46,7 @@ function PublicNR1Page() {
   }, [token]);
 
   const questions = data?.questions ?? [];
-  const allAnswered = questions.every((q) => typeof answers[q.id] === "number");
+  const allAnswered = questions.every((q) => answers[q.id] !== undefined);
 
   async function submit() {
     setSubmitting(true);
@@ -113,8 +114,9 @@ function PublicNR1Page() {
         </span>
         <h1 className="mt-3 font-display text-3xl leading-tight sm:text-4xl">{data.title}</h1>
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-          Suas respostas são 100% anônimas — nada aqui identifica você. Avalie de 1 (discordo
-          totalmente) a 5 (concordo totalmente).
+          Queremos entender como você percebe as condições de trabalho da sua equipe. Não existem
+          respostas certas ou erradas; responda considerando sua experiência no trabalho. As respostas
+          serão analisadas de forma agregada, preservando a confidencialidade individual.
         </p>
       </header>
 
@@ -130,19 +132,33 @@ function PublicNR1Page() {
                     key={n}
                     onClick={() => setAnswers((s) => ({ ...s, [q.id]: n }))}
                     className={
-                      "h-14 flex-1 rounded-xl border text-base font-bold transition-all " +
+                      "h-12 flex-1 rounded-xl border text-base font-bold transition-all " +
                       (val === n
-                        ? "scale-110 border-transparent bg-accent-gradient text-white shadow-lg shadow-accent/40"
+                        ? "scale-105 border-transparent bg-accent-gradient text-white shadow-lg shadow-accent/40"
                         : "border-border bg-background hover:border-accent/50 hover:bg-accent/5")
                     }
                   >
                     {n}
                   </button>
                 ))}
+                <button
+                  onClick={() => setAnswers((s) => ({ ...s, [q.id]: "na" }))}
+                  className={
+                    "h-12 flex-[1.5] rounded-xl border px-2 text-xs font-semibold transition-all " +
+                    (val === "na"
+                      ? "scale-105 border-transparent bg-muted-foreground text-white shadow-lg"
+                      : "border-border bg-background hover:border-accent/50 hover:bg-accent/5")
+                  }
+                >
+                  N/A
+                </button>
               </div>
               <div className="mt-2 flex justify-between text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
                 <span>Discordo totalmente</span>
                 <span>Concordo totalmente</span>
+              </div>
+              <div className="mt-1 text-right text-[10px] text-muted-foreground">
+                N/A — Não se aplica / Não consigo avaliar
               </div>
             </div>
           );
