@@ -287,7 +287,7 @@ nr1Router.patch("/:orgId/nr1/actions/:id", async (req, res) => {
   }
 });
 
-nr1Router.post("/:orgId/nr1/actions/:id/progress", (req, res) => {
+nr1Router.post("/:orgId/nr1/actions/:id/progress", async (req, res) => {
   try {
     const data = actionProgressSchema.parse(req.body);
     const action = await prisma.nR1Action.findFirst({
