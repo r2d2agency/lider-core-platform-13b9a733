@@ -119,13 +119,17 @@ const actionSchema = z.object({
   cancelReason: z.string().max(1000).optional().nullable(),
 });
 const actionUpdateSchema = actionSchema.partial().omit({ origin: true });
+const actionProgressSchema = z.object({
+  kind: z.enum(["progress", "impediment", "adjustment", "conclusion"]),
+  note: z.string().min(2).max(2000),
+});
 
 function actionDate(value: string | null | undefined) {
   return value ? new Date(value) : null;
 }
-function appendHistory(history: unknown, event: string, userId: string) {
+function appendHistory(history: unknown, event: string, userId: string, note?: string) {
   const current = Array.isArray(history) ? history : [];
-  return [...current, { event, at: new Date().toISOString(), by: userId }];
+  return [...current, { event, at: new Date().toISOString(), by: userId, ...(note ? { note } : {}) }];
 }
 
 const NR1_EVIDENCE_MIME = new Set([
@@ -273,10 +277,33 @@ nr1Router.patch("/:orgId/nr1/actions/:id", async (req, res) => {
                 ? `sufficiency:${data.sufficiency}`
                 : "updated",
           req.userId!,
+          data.result ?? data.sufficiencyNote ?? undefined,
         ),
       },
     });
     res.json(action);
+  } catch (err) {
+    badReq(res, err);
+  }
+});
+
+nr1Router.post("/:orgId/nr1/actions/:id/progress", (req, res) => {
+  try {
+    const data = actionProgressSchema.parse(req.body);
+    const action = await prisma.nR1Action.findFirst({
+      where: { id: req.params.id, organizationId: req.params.orgId },
+    });
+    if (!action) return res.status(404).json({ error: "Ação não encontrada." });
+
+    const updated = await prisma.nR1Action.update({
+      where: { id: action.id },
+      data: {
+        ...(data.kind === "conclusion" ? { status: "completed" } : {}),
+        updatedBy: req.userId!,
+        history: appendHistory(action.history, data.kind, req.userId!, data.note),
+      },
+    });
+    res.json(updated);
   } catch (err) {
     badReq(res, err);
   }

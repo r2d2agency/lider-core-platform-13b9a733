@@ -115,6 +115,12 @@ type NR1ActionEvidence = {
   uploadedAt: string;
   uploadedBy: string;
 };
+type NR1ActionHistory = {
+  event: string;
+  at: string;
+  by: string;
+  note?: string;
+};
 type NR1Action = {
   id: string;
   situation: string;
@@ -133,6 +139,7 @@ type NR1Action = {
   cancelReason: string | null;
   surveyId: string | null;
   evidence: NR1ActionEvidence[];
+  history: NR1ActionHistory[];
 };
 type ComplaintStatus = "open" | "in_review" | "resolved";
 type Complaint = {
@@ -402,6 +409,8 @@ function RiskWorkspace({ orgId }: { orgId: string }) {
   const [editNextCheckAt, setEditNextCheckAt] = useState("");
   const [cancelReason, setCancelReason] = useState("");
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
+  const [progressKind, setProgressKind] = useState<"progress" | "impediment" | "adjustment" | "conclusion">("progress");
+  const [progressNote, setProgressNote] = useState("");
 
   const actions = useQuery({
     queryKey: ["nr1", "actions", orgId, status],
@@ -434,6 +443,14 @@ function RiskWorkspace({ orgId }: { orgId: string }) {
     onSuccess: () => { toast.success("Ação excluída."); setSelectedAction(null); qc.invalidateQueries({ queryKey: ["nr1", "actions", orgId] }); },
     onError: (e: Error) => toast.error(e.message),
   });
+  const addProgress = useMutation({
+    mutationFn: (actionId: string) => api<NR1Action>(`/organization/${orgId}/nr1/actions/${actionId}/progress`, {
+      method: "POST",
+      body: { kind: progressKind, note: progressNote },
+    }),
+    onSuccess: () => { toast.success("Registro adicionado."); setProgressNote(""); qc.invalidateQueries({ queryKey: ["nr1", "actions", orgId] }); },
+    onError: (e: Error) => toast.error(e.message),
+  });
   const uploadEvidence = useMutation({
     mutationFn: (actionId: string) => {
       if (!evidenceFile) return Promise.reject(new Error("Selecione um arquivo."));
@@ -459,6 +476,8 @@ function RiskWorkspace({ orgId }: { orgId: string }) {
     setEditNextCheckAt(action.nextCheckAt?.slice(0, 10) ?? "");
     setCancelReason(action.cancelReason ?? "");
     setEvidenceFile(null);
+    setProgressKind("progress");
+    setProgressNote("");
   };
   const list = actions.data ?? [];
   const statusLabels: Record<ActionStatus, string> = { not_started: "Não iniciada", in_progress: "Em andamento", completed: "Concluída", overdue: "Atrasada", cancelled: "Cancelada" };
@@ -516,6 +535,11 @@ function RiskWorkspace({ orgId }: { orgId: string }) {
               {(selectedAction.outcome || selectedAction.sufficiency) && <div className="grid gap-3 rounded-xl bg-muted/40 p-3 text-sm sm:grid-cols-3"><div><span className="text-muted-foreground">O que mudou: </span>{selectedAction.outcome === "improved" ? "Melhorou" : selectedAction.outcome === "partially_improved" ? "Melhorou parcialmente" : selectedAction.outcome === "unchanged" ? "Não mudou" : selectedAction.outcome === "worsened" ? "Piorou" : selectedAction.outcome === "not_assessable" ? "Não avaliável" : "Não avaliado"}</div><div><span className="text-muted-foreground">Suficiência: </span>{selectedAction.sufficiency === "sufficient" ? "Suficiente" : selectedAction.sufficiency === "partial" ? "Parcialmente suficiente" : selectedAction.sufficiency === "insufficient" ? "Insuficiente" : "Pendente"}</div><div><span className="text-muted-foreground">Próxima verificação: </span>{selectedAction.nextCheckAt ? new Date(selectedAction.nextCheckAt).toLocaleDateString("pt-BR") : "Não definida"}</div></div>}
               {selectedAction.sufficiencyNote && <div><Label className="text-xs">Observações de suficiência</Label><p className="mt-1 rounded-xl border border-border p-3 text-sm">{selectedAction.sufficiencyNote}</p></div>}
               {selectedAction.cancelReason && <div><Label className="text-xs">Justificativa do cancelamento</Label><p className="mt-1 rounded-xl border border-border p-3 text-sm">{selectedAction.cancelReason}</p></div>}
+              <div className="space-y-2 rounded-xl border border-border p-3">
+                <Label className="text-xs">Histórico de execução</Label>
+                {selectedAction.history.length === 0 ? <p className="mt-1 text-xs text-muted-foreground">Nenhum registro ainda.</p> : <div className="mt-2 space-y-2">{[...selectedAction.history].reverse().map((item, index) => <div key={`${item.at}-${index}`} className="flex gap-2 text-xs"><span className="shrink-0 font-medium text-muted-foreground">{new Date(item.at).toLocaleDateString("pt-BR")}</span><span><strong>{item.event === "created" ? "Ação criada" : item.event === "progress" ? "Progresso" : item.event === "impediment" ? "Impedimento" : item.event === "adjustment" ? "Ajuste" : item.event === "conclusion" ? "Conclusão" : item.event.startsWith("status:") ? `Status: ${item.event.split(":")[1]}` : item.event}</strong>{item.note ? ` — ${item.note}` : ""}</span></div>)}</div>}
+                <div className="grid gap-2 sm:grid-cols-[160px_1fr_auto]"><Select value={progressKind} onValueChange={(value) => setProgressKind(value as typeof progressKind)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="progress">Progresso</SelectItem><SelectItem value="impediment">Impedimento</SelectItem><SelectItem value="adjustment">Ajuste</SelectItem><SelectItem value="conclusion">Conclusão</SelectItem></SelectContent></Select><Input value={progressNote} onChange={(e) => setProgressNote(e.target.value)} placeholder="Registrar o que aconteceu" /><Button size="sm" onClick={() => addProgress.mutate(selectedAction.id)} disabled={!progressNote.trim() || addProgress.isPending}>Adicionar</Button></div>
+              </div>
               <div className="space-y-2"><div className="flex items-center justify-between"><Label className="text-xs">Evidências anexadas</Label><span className="text-xs text-muted-foreground">{selectedAction.evidence.length} arquivo{selectedAction.evidence.length === 1 ? "" : "s"}</span></div>{selectedAction.evidence.length > 0 && <div className="space-y-1">{selectedAction.evidence.map((item, index) => <a key={`${item.uploadedAt}-${index}`} href={item.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs hover:border-accent/50"><Paperclip className="h-3.5 w-3.5 shrink-0" /><span className="truncate">{item.originalName}</span><span className="ml-auto shrink-0 text-muted-foreground">{(item.size / 1024).toFixed(0)} KB</span></a>)}</div>}<div className="flex items-center gap-2"><Input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.txt" onChange={(e) => setEvidenceFile(e.target.files?.[0] ?? null)} /><Button size="sm" onClick={() => uploadEvidence.mutate(selectedAction.id)} disabled={!evidenceFile || uploadEvidence.isPending}><Paperclip className="mr-1.5 h-4 w-4" />{uploadEvidence.isPending ? "Anexando…" : "Anexar"}</Button></div></div>
               <div className="flex flex-wrap justify-end gap-2 border-t pt-3"><Button variant="outline" size="sm" className="text-rose-600" onClick={() => remove.mutate(selectedAction.id)} disabled={remove.isPending}><Trash2 className="mr-1.5 h-4 w-4" />Excluir</Button><Button size="sm" onClick={() => setEditingAction(true)}><Pencil className="mr-1.5 h-4 w-4" />Editar ação</Button></div>
             </div>}
