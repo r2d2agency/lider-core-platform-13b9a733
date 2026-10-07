@@ -127,13 +127,39 @@ nr1Router.post("/:orgId/nr1/surveys", async (req, res) => {
 nr1Router.get("/:orgId/nr1/surveys/:id", async (req, res) => {
   const s = await prisma.nR1Survey.findFirst({
     where: { id: req.params.id, organizationId: req.params.orgId },
-    include: { responses: { orderBy: { createdAt: "desc" } } },
+    include: {
+      responses: { orderBy: { createdAt: "desc" } },
+      factorAnalyses: true,
+    },
   });
   if (!s) return res.status(404).json({ error: "Pesquisa não encontrada" });
 
   const answersList = s.responses.map((r) => r.answers as NR1Answers);
   // Marco 3.5 — resultados só com o mínimo de respostas válidas (anonimato).
   const insufficient = s.responses.length < NR1_MIN_RESPONSES;
+  const factors = insufficient ? [] : nr1FactorResults(answersList);
+
+  // Marco 6.7 — evolução: compara com a rodada anterior da mesma equipe
+  // (mesmo teamId) encerrada antes do início desta, ou a anterior sem equipe.
+  const previous = await prisma.nR1Survey.findFirst({
+    where: {
+      organizationId: s.organizationId,
+      teamId: s.teamId,
+      id: { not: s.id },
+      createdAt: { lt: s.createdAt },
+      responses: { some: {} },
+    },
+    orderBy: { createdAt: "desc" },
+    include: { responses: true },
+  });
+  let previousFactors: typeof factors = [];
+  let previousLabel: string | null = null;
+  if (previous && previous.responses.length >= NR1_MIN_RESPONSES) {
+    previousFactors = nr1FactorResults(
+      previous.responses.map((r) => r.answers as NR1Answers),
+    );
+    previousLabel = previous.title;
+  }
 
   res.json({
     ...s,
@@ -143,10 +169,54 @@ nr1Router.get("/:orgId/nr1/surveys/:id", async (req, res) => {
       createdAt: r.createdAt,
     })),
     tabulation: nr1QuestionTabulation(answersList),
-    factors: insufficient ? [] : nr1FactorResults(answersList),
+    factors,
     resultAvailable: !insufficient,
     insufficientMessage: insufficient ? nr1Message("insufficient") : null,
+    previousLabel,
+    previousFactors,
+    factorAnalyses: s.factorAnalyses,
   });
+});
+
+// Análise do líder por fator (Marco 7.7/7.8): texto, contexto e decisão.
+const factorAnalysisSchema = z.object({
+  factorId: z.string().min(1),
+  text: z.string().max(4000).nullable(),
+  contexts: z.array(z.string().max(120)).max(10).default([]),
+  decision: z.enum(["criar_acao", "acao_existente", "acompanhar", "sem_acao"]).nullable(),
+});
+
+nr1Router.put("/:orgId/nr1/surveys/:id/factor-analysis", async (req, res) => {
+  try {
+    const data = factorAnalysisSchema.parse(req.body);
+    const survey = await prisma.nR1Survey.findFirst({
+      where: { id: req.params.id, organizationId: req.params.orgId },
+      select: { id: true },
+    });
+    if (!survey) return res.status(404).json({ error: "Pesquisa não encontrada" });
+
+    const analysis = await prisma.nR1FactorAnalysis.upsert({
+      where: {
+        surveyId_factorId: { surveyId: survey.id, factorId: data.factorId },
+      },
+      create: {
+        surveyId: survey.id,
+        factorId: data.factorId,
+        text: data.text,
+        contexts: data.contexts,
+        decision: data.decision ?? null,
+        createdBy: req.userId!,
+      },
+      update: {
+        text: data.text,
+        contexts: data.contexts,
+        decision: data.decision ?? null,
+      },
+    });
+    res.json(analysis);
+  } catch (err) {
+    badReq(res, err);
+  }
 });
 
 const aiAnalysisSchema = z.object({

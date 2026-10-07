@@ -75,11 +75,21 @@ type FactorResult = {
   validCount: number;
   classification: "muito_favoravel" | "atencao" | "prioridade" | null;
 };
+type FactorAnalysis = {
+  id: string;
+  factorId: string;
+  text: string | null;
+  contexts: string[];
+  decision: "criar_acao" | "acao_existente" | "acompanhar" | "sem_acao" | null;
+};
 type SurveyDetail = Survey & {
   tabulation: Tabulation[];
   factors: FactorResult[];
   resultAvailable: boolean;
   insufficientMessage: string | null;
+  previousLabel: string | null;
+  previousFactors: FactorResult[];
+  factorAnalyses: FactorAnalysis[];
 };
 type AIAnalysis = {
   summary: string;
@@ -532,13 +542,27 @@ function SurveyDetailDialog({
 
   const t = detail.data?.tabulation ?? [];
   const factors = detail.data?.factors ?? [];
+  const previousFactors = detail.data?.previousFactors ?? [];
+  const analyses = detail.data?.factorAnalyses ?? [];
+  const [selectedFactor, setSelectedFactor] = useState<string | null>(null);
+  const attentionFactors = factors.filter(
+    (f) => f.classification === "prioridade" || f.classification === "atencao",
+  );
+  const order = { prioridade: 0, atencao: 1, muito_favoravel: 2 } as const;
+  const sortedFactors = [...factors].sort(
+    (a, b) =>
+      (order[a.classification ?? "muito_favoravel"] - order[b.classification ?? "muito_favoravel"]) ||
+      (a.percent ?? 100) - (b.percent ?? 100),
+  );
 
   return (
-    <DialogContent className="flex max-h-[92vh] flex-col overflow-hidden sm:max-w-xl">
+    <DialogContent className="flex max-h-[92vh] flex-col overflow-hidden sm:max-w-2xl">
       <DialogHeader>
         <DialogTitle>{survey.title}</DialogTitle>
         <p className="text-xs text-muted-foreground">
-          Tabulação automática das respostas anônimas.
+          {detail.data?.resultAvailable
+            ? `Resultado agregado · ${detail.data.previousLabel ? `Comparação com "${detail.data.previousLabel}"` : "Ainda não há uma avaliação anterior para comparação."}`
+            : "Resultado das respostas anônimas da equipe."}
         </p>
       </DialogHeader>
 
@@ -549,54 +573,54 @@ function SurveyDetailDialog({
           <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
             {detail.data?.insufficientMessage ?? "Ainda sem respostas."}
           </div>
+        ) : selectedFactor ? (
+          <FactorDetailView
+            orgId={orgId}
+            surveyId={survey.id}
+            factor={factors.find((f) => f.id === selectedFactor)!}
+            previous={previousFactors.find((f) => f.id === selectedFactor) ?? null}
+            questions={t.filter((q) => q.factors?.includes(selectedFactor))}
+            analysis={analyses.find((a) => a.factorId === selectedFactor) ?? null}
+            onBack={() => {
+              setSelectedFactor(null);
+              invalidate();
+            }}
+          />
         ) : (
           <>
+            {attentionFactors.length > 0 && (
+              <div className="rounded-xl border border-amber-300/70 bg-amber-500/5 p-4 dark:border-amber-500/25">
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  <TriangleAlert className="h-4 w-4 text-amber-600" /> Fatores que merecem atenção
+                  na sua equipe
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {attentionFactors.map((f) => (
+                    <button
+                      key={f.id}
+                      onClick={() => setSelectedFactor(f.id)}
+                      className="rounded-full border border-border bg-background px-3 py-1 text-xs font-medium transition hover:border-accent/50"
+                    >
+                      {f.name} · {f.percent?.toFixed(0)}%
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="space-y-3">
-              <h3 className="text-sm font-semibold">Fatores psicossociais</h3>
-              {factors.map((factor) => {
-                const tone =
-                  factor.classification === "prioridade"
-                    ? "border-rose-300 bg-rose-500/5"
-                    : factor.classification === "atencao"
-                      ? "border-amber-300 bg-amber-500/5"
-                      : "border-emerald-300 bg-emerald-500/5";
-                const label =
-                  factor.classification === "prioridade"
-                    ? "Prioridade"
-                    : factor.classification === "atencao"
-                      ? "Atenção"
-                      : factor.classification === "muito_favoravel"
-                        ? "Muito favorável"
-                        : "Sem dados";
-                return (
-                  <div key={factor.id} className={`rounded-xl border p-3 ${tone}`}>
-                    <div className="flex items-start justify-between gap-3 text-xs">
-                      <span className="font-medium text-foreground/90">{factor.name}</span>
-                      <span className="shrink-0 font-semibold">
-                        {factor.percent != null ? `${factor.percent.toFixed(1)}%` : "—"} · {label}
-                      </span>
-                    </div>
-                    <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                      <div
-                        className={`h-full rounded-full ${
-                          factor.classification === "prioridade"
-                            ? "bg-rose-500"
-                            : factor.classification === "atencao"
-                              ? "bg-amber-500"
-                              : "bg-emerald-500"
-                        }`}
-                        style={{ width: `${factor.percent ?? 0}%` }}
-                      />
-                    </div>
-                    {factor.average != null && (
-                      <p className="mt-1 text-[11px] text-muted-foreground">
-                        Média {factor.average.toFixed(2)}/5 · {factor.validCount} respostas válidas
-                      </p>
-                    )}
-                  </div>
-                );
-              })}
+              <h3 className="text-sm font-semibold">Visão geral dos 13 fatores</h3>
+              {sortedFactors.map((factor) => (
+                <button
+                  key={factor.id}
+                  onClick={() => setSelectedFactor(factor.id)}
+                  className="block w-full text-left"
+                >
+                  <FactorCard factor={factor} previous={previousFactors.find((p) => p.id === factor.id) ?? null} />
+                </button>
+              ))}
             </div>
+
             <details className="rounded-xl border border-border p-3">
               <summary className="cursor-pointer text-sm font-semibold">Detalhamento das 33 perguntas</summary>
               <ul className="mt-3 space-y-2.5">
@@ -614,9 +638,6 @@ function SurveyDetailDialog({
                         style={{ width: `${q.percent ?? 0}%` }}
                       />
                     </div>
-                    <p className="mt-1 text-[11px] text-muted-foreground">
-                      {q.average != null ? `Média ${q.average.toFixed(2)}/5` : "Sem respostas válidas"} · {q.validCount} respostas · fatores: {q.factors?.join(", ")}
-                    </p>
                   </li>
                 ))}
               </ul>
@@ -719,6 +740,304 @@ function SurveyDetailDialog({
         </Button>
       </DialogFooter>
     </DialogContent>
+  );
+}
+
+function FactorCard({ factor, previous }: { factor: FactorResult; previous: FactorResult | null }) {
+  const tone =
+    factor.classification === "prioridade"
+      ? "border-rose-300 bg-rose-500/5"
+      : factor.classification === "atencao"
+        ? "border-amber-300 bg-amber-500/5"
+        : "border-emerald-300 bg-emerald-500/5";
+  const bar =
+    factor.classification === "prioridade"
+      ? "bg-rose-500"
+      : factor.classification === "atencao"
+        ? "bg-amber-500"
+        : "bg-emerald-500";
+  const label =
+    factor.classification === "prioridade"
+      ? "Prioridade"
+      : factor.classification === "atencao"
+        ? "Atenção"
+        : factor.classification === "muito_favoravel"
+          ? "Muito favorável"
+          : "Sem dados";
+  const delta =
+    previous?.percent != null && factor.percent != null
+      ? factor.percent - previous.percent
+      : null;
+  return (
+    <div className={`rounded-xl border p-3 transition hover:border-accent/50 ${tone}`}>
+      <div className="flex items-start justify-between gap-3 text-xs">
+        <span className="flex items-center gap-1.5 font-medium text-foreground/90">
+          {factor.name}
+          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+        </span>
+        <span className="flex shrink-0 items-center gap-2 font-semibold">
+          {delta != null && (
+            <span
+              className={`text-[10px] font-semibold ${delta >= 0 ? "text-emerald-600" : "text-rose-600"}`}
+            >
+              {delta >= 0 ? "▲" : "▼"} {Math.abs(delta).toFixed(1)} pts
+            </span>
+          )}
+          {factor.percent != null ? `${factor.percent.toFixed(1)}%` : "—"} · {label}
+        </span>
+      </div>
+      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+        <div className={`h-full rounded-full ${bar}`} style={{ width: `${factor.percent ?? 0}%` }} />
+      </div>
+      {factor.average != null && (
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          Média {factor.average.toFixed(2)}/5 · {factor.validCount} respostas válidas
+        </p>
+      )}
+    </div>
+  );
+}
+
+const FACTOR_DESCRIPTIONS: Record<string, string> = {
+  assedio:
+    "Relacionado à percepção sobre tolerância a situações de constrangimento, humilhação, intimidação, discriminação ou qualquer forma de assédio, e à existência de caminhos claros para agir e recorrer.",
+  gestao_mudancas:
+    "Relacionado à percepção sobre comunicação, estrutura e suporte diante de mudanças que impactam o trabalho.",
+  clareza_papel:
+    "Relacionado à percepção sobre clareza de responsabilidades, prioridades, resultados esperados e consistência das orientações recebidas.",
+  reconhecimento:
+    "Relacionado à percepção sobre valorização, elogios e reconhecimento pelo bom trabalho e esforço.",
+  suporte:
+    "Relacionado à percepção sobre apoio da liderança imediata, dos colegas e da organização diante de problemas e necessidades de aprendizado.",
+  controle_autonomia:
+    "Relacionado à percepção sobre autonomia para decidir como realizar o trabalho e participação nas decisões relacionadas a ele.",
+  justica_organizacional:
+    "Relacionado à percepção sobre justiça das decisões da direção e aplicação consistente das regras e critérios que afetam os colaboradores.",
+  eventos_violentos:
+    "Relacionado à percepção sobre medidas de prevenção de situações de violência, ameaça ou agressão relacionadas ao trabalho.",
+  baixa_demanda:
+    "Relacionado à percepção sobre quantidade insuficiente de atividades e oportunidades para utilizar competências, conhecimentos e habilidades.",
+  excesso_demandas:
+    "Relacionado à percepção sobre volume e distribuição das atividades, prazos, ritmo de trabalho e pressão para realização das tarefas.",
+  relacoes_trabalho:
+    "Relacionado à percepção sobre respeito mútuo, colaboração e condução de conflitos na equipe.",
+  comunicacao:
+    "Relacionado à percepção sobre clareza dos conteúdos e canais de comunicação da organização.",
+  trabalho_remoto:
+    "Relacionado à percepção sobre oportunidades adequadas de interação e contato com a equipe e liderança, independentemente do modelo de trabalho.",
+};
+
+const ANALYSIS_CONTEXT_OPTIONS = [
+  "Situação já conhecida pela liderança",
+  "Situação relacionada a mudança recente",
+  "Situação pontual",
+  "Situação recorrente",
+  "Já existe ação em andamento",
+  "Preciso investigar melhor antes de definir uma ação",
+] as const;
+
+const DECISION_OPTIONS = [
+  { value: "criar_acao", label: "Criar ação" },
+  { value: "acao_existente", label: "Vincular a ação existente" },
+  { value: "acompanhar", label: "Acompanhar" },
+  { value: "sem_acao", label: "Sem necessidade de ação agora" },
+] as const;
+
+function FactorDetailView({
+  orgId,
+  surveyId,
+  factor,
+  previous,
+  questions,
+  analysis: initialAnalysis,
+  onBack,
+}: {
+  orgId: string;
+  surveyId: string;
+  factor: FactorResult;
+  previous: FactorResult | null;
+  questions: Tabulation[];
+  analysis: FactorAnalysis | null;
+  onBack: () => void;
+}) {
+  const qc = useQueryClient();
+  const [text, setText] = useState(initialAnalysis?.text ?? "");
+  const [contexts, setContexts] = useState<string[]>(initialAnalysis?.contexts ?? []);
+  const [decision, setDecision] = useState<string | null>(initialAnalysis?.decision ?? null);
+  const [saved, setSaved] = useState(false);
+
+  const save = useMutation({
+    mutationFn: () =>
+      api(`/organization/${orgId}/nr1/surveys/${surveyId}/factor-analysis`, {
+        method: "PUT",
+        body: {
+          factorId: factor.id,
+          text: text.trim() || null,
+          contexts,
+          decision: decision ?? null,
+        },
+      }),
+    onSuccess: () => {
+      setSaved(true);
+      toast.success("Análise registrada.");
+      qc.invalidateQueries({ queryKey: ["nr1", "survey", orgId, surveyId] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const mandatory = factor.classification === "prioridade";
+  const recommended = factor.classification === "atencao";
+  const analysisTone = mandatory
+    ? "border-rose-300 bg-rose-500/5 dark:border-rose-500/30"
+    : recommended
+      ? "border-amber-300 bg-amber-500/5 dark:border-amber-500/25"
+      : "border-border";
+  const analysisTitle = mandatory
+    ? "Prioridade — análise obrigatória"
+    : recommended
+      ? "Atenção — análise recomendada"
+      : "Muito favorável — sem análise obrigatória";
+  const analysisPrompt = mandatory
+    ? "Este fator apresentou um resultado que merece análise prioritária. Registre sua percepção sobre o que pode estar acontecendo na equipe antes de definir uma ação."
+    : recommended
+      ? "Este fator merece atenção e acompanhamento. Recomendamos registrar sua análise para entender melhor a situação e avaliar se é necessário criar uma ação."
+      : "O líder pode consultar o detalhamento e acompanhar o resultado, mas não precisa registrar uma análise obrigatoriamente.";
+
+  return (
+    <div className="space-y-4">
+      <button
+        onClick={onBack}
+        className="flex items-center gap-1 text-xs font-medium text-muted-foreground transition hover:text-foreground"
+      >
+        ← Voltar para a visão geral
+      </button>
+
+      <FactorCard factor={factor} previous={previous} />
+
+      <div className="rounded-xl border border-border p-4">
+        <h4 className="text-sm font-semibold">O que este fator representa</h4>
+        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+          {FACTOR_DESCRIPTIONS[factor.id] ?? ""}
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-border p-4">
+        <h4 className="text-sm font-semibold">O que apareceu na avaliação da sua equipe</h4>
+        {questions.length === 0 ? (
+          <p className="mt-1 text-xs text-muted-foreground">Sem perguntas vinculadas.</p>
+        ) : (
+          <ul className="mt-2 space-y-2">
+            {questions.map((q) => (
+              <li key={q.id}>
+                <div className="flex items-center justify-between gap-3 text-xs">
+                  <span className="text-foreground/90">{q.label}</span>
+                  <span className="shrink-0 font-semibold">
+                    {q.percent != null ? `${q.percent.toFixed(1)}%` : "—"}
+                  </span>
+                </div>
+                <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className={`h-full rounded-full ${q.percent != null && q.percent < 50 ? "bg-rose-500" : q.percent != null && q.percent < 75 ? "bg-amber-500" : "bg-emerald-500"}`}
+                    style={{ width: `${q.percent ?? 0}%` }}
+                  />
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        {questions.length > 0 && (
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            Maior ponto de atenção:{" "}
+            {
+              [...questions]
+                .filter((q) => q.percent != null)
+                .sort((a, b) => (a.percent ?? 100) - (b.percent ?? 100))[0]?.label
+            }
+            .
+          </p>
+        )}
+      </div>
+
+      <div className={`rounded-xl border p-4 ${analysisTone}`}>
+        <h4 className="flex items-center gap-2 text-sm font-semibold">
+          <TriangleAlert className="h-4 w-4" /> Análise do líder · {analysisTitle}
+        </h4>
+        <p className="mt-1 text-xs text-muted-foreground">{analysisPrompt}</p>
+
+        <Label className="mt-3 block text-xs">O que você observa na sua equipe em relação a este fator?</Label>
+        <Textarea
+          rows={3}
+          className="mt-1 resize-none"
+          value={text}
+          onChange={(e) => {
+            setText(e.target.value);
+            setSaved(false);
+          }}
+          placeholder="Registre sua percepção sobre a situação da equipe…"
+        />
+
+        <div className="mt-3">
+          <Label className="text-xs">Contexto (opcional)</Label>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {ANALYSIS_CONTEXT_OPTIONS.map((option) => {
+              const active = contexts.includes(option);
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => {
+                    setContexts((prev) =>
+                      prev.includes(option) ? prev.filter((c) => c !== option) : [...prev, option],
+                    );
+                    setSaved(false);
+                  }}
+                  className={`rounded-full border px-2.5 py-1 text-[11px] transition ${
+                    active
+                      ? "border-transparent bg-accent-gradient font-semibold text-white"
+                      : "border-border bg-background hover:border-accent/50"
+                  }`}
+                >
+                  {option}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="mt-3">
+          <Label className="text-xs">Decisão após a análise</Label>
+          <Select
+            value={decision ?? ""}
+            onValueChange={(v) => {
+              setDecision(v || null);
+              setSaved(false);
+            }}
+          >
+            <SelectTrigger className="mt-1.5">
+              <SelectValue placeholder="O que fará com este resultado?" />
+            </SelectTrigger>
+            <SelectContent>
+              {DECISION_OPTIONS.map((d) => (
+                <SelectItem key={d.value} value={d.value}>
+                  {d.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="mt-3 flex items-center justify-end gap-2">
+          {saved && <span className="text-[11px] text-muted-foreground">Análise salva.</span>}
+          <Button
+            size="sm"
+            onClick={() => save.mutate()}
+            disabled={save.isPending}
+          >
+            {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salvar análise"}
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 

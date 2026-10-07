@@ -1982,6 +1982,7 @@ model NR1Survey {
   closedAt       DateTime?       @map("closed_at")
 
   responses NR1Response[]
+  factorAnalyses NR1FactorAnalysis[]
 
   @@index([organizationId])
   @@map("nr1_surveys")
@@ -1999,6 +2000,26 @@ model NR1Response {
 
   @@index([surveyId])
   @@map("nr1_responses")
+}
+
+// Análise do líder por fator (Marco 07): texto de observação, opções
+// auxiliares de contexto e a decisão tomada após a análise.
+model NR1FactorAnalysis {
+  id           String   @id @default(uuid()) @db.Uuid
+  surveyId     String   @map("survey_id") @db.Uuid
+  factorId     String   @map("factor_id")
+  text         String?
+  contexts     String[] @default([])
+  decision     String?
+  createdBy    String?  @map("created_by") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  survey NR1Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+
+  @@unique([surveyId, factorId])
+  @@index([surveyId])
+  @@map("nr1_factor_analyses")
 }
 
 // Link permanente por organização para denúncia anônima (não atrelado a
