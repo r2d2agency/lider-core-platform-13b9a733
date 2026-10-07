@@ -17,6 +17,10 @@ import {
   ArrowRight,
   Activity,
   TriangleAlert,
+  Paperclip,
+  Pencil,
+  Trash2,
+  X,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useCurrentOrg } from "@/lib/use-current-org";
@@ -100,6 +104,35 @@ type AIAnalysis = {
     reason: string;
   };
   generatedAt: string;
+};
+type ActionStatus = "not_started" | "in_progress" | "completed" | "overdue" | "cancelled";
+type NR1ActionEvidence = {
+  url: string;
+  path: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+  uploadedAt: string;
+  uploadedBy: string;
+};
+type NR1Action = {
+  id: string;
+  situation: string;
+  description: string;
+  origin: string;
+  factorId: string | null;
+  responsibleLabel: string | null;
+  dueDate: string | null;
+  status: ActionStatus;
+  followUpMethod: string | null;
+  result: string | null;
+  outcome: "improved" | "partially_improved" | "unchanged" | "worsened" | "not_assessable" | null;
+  sufficiency: "sufficient" | "partial" | "insufficient" | "pending" | null;
+  sufficiencyNote: string | null;
+  nextCheckAt: string | null;
+  cancelReason: string | null;
+  surveyId: string | null;
+  evidence: NR1ActionEvidence[];
 };
 type ComplaintStatus = "open" | "in_review" | "resolved";
 type Complaint = {
@@ -345,24 +378,150 @@ function AssessmentCatalog() {
 }
 
 function RiskWorkspace({ orgId }: { orgId: string }) {
-  const q = useQuery({
-    queryKey: ["nr1", "surveys", orgId],
-    queryFn: () => api<Survey[]>(`/organization/${orgId}/nr1/surveys`),
+  const qc = useQueryClient();
+  const [status, setStatus] = useState<"all" | ActionStatus>("all");
+  const [creating, setCreating] = useState(false);
+  const [situation, setSituation] = useState("");
+  const [description, setDescription] = useState("");
+  const [factorId, setFactorId] = useState("");
+  const [origin, setOrigin] = useState("leader_identification");
+  const [dueDate, setDueDate] = useState("");
+  const [responsibleLabel, setResponsibleLabel] = useState("");
+  const [followUpMethod, setFollowUpMethod] = useState("");
+  const [selectedAction, setSelectedAction] = useState<NR1Action | null>(null);
+  const [editingAction, setEditingAction] = useState(false);
+  const [editSituation, setEditSituation] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editResponsible, setEditResponsible] = useState("");
+  const [editDueDate, setEditDueDate] = useState("");
+  const [editFollowUp, setEditFollowUp] = useState("");
+  const [editResult, setEditResult] = useState("");
+  const [editOutcome, setEditOutcome] = useState<NR1Action["outcome"]>(null);
+  const [editSufficiency, setEditSufficiency] = useState<NR1Action["sufficiency"] | "">("pending" as NR1Action["sufficiency"]);
+  const [editSufficiencyNote, setEditSufficiencyNote] = useState("");
+  const [editNextCheckAt, setEditNextCheckAt] = useState("");
+  const [cancelReason, setCancelReason] = useState("");
+  const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
+
+  const actions = useQuery({
+    queryKey: ["nr1", "actions", orgId, status],
+    queryFn: () => api<NR1Action[]>(`/organization/${orgId}/nr1/actions${status === "all" ? "" : `?status=${status}`}`),
   });
-  const ready = (q.data ?? []).filter((survey) => survey.responseCount >= 3);
+  const create = useMutation({
+    mutationFn: () => api<NR1Action>(`/organization/${orgId}/nr1/actions`, {
+      method: "POST",
+      body: {
+        situation, description, factorId: factorId || null, origin,
+        dueDate: dueDate ? new Date(`${dueDate}T23:59:59`).toISOString() : null,
+        responsibleLabel: responsibleLabel || null,
+        followUpMethod: followUpMethod || null,
+      },
+    }),
+    onSuccess: () => {
+      toast.success("Ação criada.");
+      setCreating(false); setSituation(""); setDescription(""); setFactorId(""); setOrigin("leader_identification"); setDueDate(""); setResponsibleLabel(""); setFollowUpMethod("");
+      qc.invalidateQueries({ queryKey: ["nr1", "actions", orgId] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  const update = useMutation({
+    mutationFn: ({ id, next }: { id: string; next: Partial<NR1Action> }) => api<NR1Action>(`/organization/${orgId}/nr1/actions/${id}`, { method: "PATCH", body: next }),
+    onSuccess: () => { toast.success("Ação atualizada."); qc.invalidateQueries({ queryKey: ["nr1", "actions", orgId] }); },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  const remove = useMutation({
+    mutationFn: (id: string) => api(`/organization/${orgId}/nr1/actions/${id}`, { method: "DELETE" }),
+    onSuccess: () => { toast.success("Ação excluída."); setSelectedAction(null); qc.invalidateQueries({ queryKey: ["nr1", "actions", orgId] }); },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  const uploadEvidence = useMutation({
+    mutationFn: (actionId: string) => {
+      if (!evidenceFile) return Promise.reject(new Error("Selecione um arquivo."));
+      const body = new FormData();
+      body.append("file", evidenceFile);
+      return api<NR1Action>(`/organization/${orgId}/nr1/actions/${actionId}/evidence`, { method: "POST", body });
+    },
+    onSuccess: () => { toast.success("Evidência anexada."); setEvidenceFile(null); qc.invalidateQueries({ queryKey: ["nr1", "actions", orgId] }); },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  const openDetail = (action: NR1Action) => {
+    setSelectedAction(action);
+    setEditingAction(false);
+    setEditSituation(action.situation);
+    setEditDescription(action.description);
+    setEditResponsible(action.responsibleLabel ?? "");
+    setEditDueDate(action.dueDate?.slice(0, 10) ?? "");
+    setEditFollowUp(action.followUpMethod ?? "");
+    setEditResult(action.result ?? "");
+    setEditOutcome(action.outcome ?? null);
+    setEditSufficiency(action.sufficiency ?? "pending");
+    setEditSufficiencyNote(action.sufficiencyNote ?? "");
+    setEditNextCheckAt(action.nextCheckAt?.slice(0, 10) ?? "");
+    setCancelReason(action.cancelReason ?? "");
+    setEvidenceFile(null);
+  };
+  const list = actions.data ?? [];
+  const statusLabels: Record<ActionStatus, string> = { not_started: "Não iniciada", in_progress: "Em andamento", completed: "Concluída", overdue: "Atrasada", cancelled: "Cancelada" };
+  const originLabels: Record<string, string> = { core_assessment: "Avaliação C.O.R.E.", risk_inventory: "Inventário de riscos", existing_action_plan: "Plano de ação existente", external_assessment: "Avaliação externa", leader_identification: "Identificação do líder", other: "Outra origem" };
+  const factors = [
+    ["assedio", "Assédio"], ["gestao_mudancas", "Gestão de mudanças"], ["clareza_papel", "Clareza de papel/função"], ["reconhecimento", "Reconhecimento"], ["suporte", "Suporte/apoio"], ["controle_autonomia", "Controle/autonomia"], ["justica_organizacional", "Justiça organizacional"], ["eventos_violentos", "Eventos violentos/traumáticos"], ["baixa_demanda", "Baixa demanda/subcarga"], ["excesso_demandas", "Excesso de demandas"], ["relacoes_trabalho", "Relações no trabalho"], ["comunicacao", "Comunicação"], ["trabalho_remoto", "Trabalho remoto/isolado"],
+  ];
   return (
-    <section className="rounded-2xl border border-border bg-card p-5">
-      <div className="flex items-center gap-2">
-        <ListChecks className="h-5 w-5 text-rose-600" />
-        <h2 className="font-display text-xl">Inventário e plano de ação</h2>
+    <section className="space-y-4 rounded-2xl border border-border bg-card p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2"><ListChecks className="h-5 w-5 text-rose-600" /><h2 className="font-display text-xl">Riscos e ações da minha equipe</h2></div>
+        <Button size="sm" onClick={() => setCreating((v) => !v)}><Plus className="mr-1.5 h-4 w-4" /> Nova ação</Button>
       </div>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Abra uma rodada com pelo menos 3 respostas para ver os fatores priorizados, solicitar a
-        análise da IA e registrar o plano.{" "}
-        {ready.length
-          ? `${ready.length} rodada(s) pronta(s) para análise.`
-          : "Ainda não há rodada com respostas suficientes."}
-      </p>
+      <p className="text-xs text-muted-foreground">Registre o que foi identificado, o que será feito, quem fará, até quando e como acompanhar. Uma ação concluída significa que foi executada; a suficiência será verificada no acompanhamento.</p>
+      {creating && <div className="space-y-3 rounded-xl border border-border bg-background p-4">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div><Label>Situação / risco identificado</Label><Input className="mt-1" value={situation} onChange={(e) => setSituation(e.target.value)} placeholder="Ex.: Excesso de demandas na equipe" /></div>
+          <div><Label>Fator relacionado</Label><Select value={factorId} onValueChange={setFactorId}><SelectTrigger className="mt-1"><SelectValue placeholder="Selecione um fator" /></SelectTrigger><SelectContent>{factors.map(([id, label]) => <SelectItem key={id} value={id}>{label}</SelectItem>)}</SelectContent></Select></div>
+        </div>
+        <div><Label>O que será feito?</Label><Textarea className="mt-1 resize-none" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Descreva a medida ou ação preventiva." /></div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div><Label>Origem</Label><Select value={origin} onValueChange={setOrigin}><SelectTrigger className="mt-1"><SelectValue /></SelectTrigger><SelectContent>{Object.entries(originLabels).map(([id, label]) => <SelectItem key={id} value={id}>{label}</SelectItem>)}</SelectContent></Select></div>
+          <div><Label>Responsável</Label><Input className="mt-1" value={responsibleLabel} onChange={(e) => setResponsibleLabel(e.target.value)} placeholder="Nome ou área" /></div>
+          <div><Label>Prazo</Label><Input className="mt-1" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></div>
+        </div>
+        <div><Label>Como vamos acompanhar?</Label><Input className="mt-1" value={followUpMethod} onChange={(e) => setFollowUpMethod(e.target.value)} placeholder="Ex.: reunião mensal, indicador, nova avaliação" /></div>
+        <div className="flex justify-end gap-2"><Button variant="ghost" onClick={() => setCreating(false)}>Cancelar</Button><Button onClick={() => create.mutate()} disabled={create.isPending || !situation.trim() || !description.trim()}>{create.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Criar ação"}</Button></div>
+      </div>}
+      <div className="flex flex-wrap gap-1.5">{([["all", "Todos"], ["not_started", "Não iniciadas"], ["in_progress", "Em andamento"], ["overdue", "Atrasadas"], ["completed", "Concluídas"], ["cancelled", "Canceladas"]] as const).map(([value, label]) => <button key={value} onClick={() => setStatus(value)} className={`rounded-full border px-3 py-1 text-xs ${status === value ? "border-transparent bg-accent-gradient font-semibold text-white" : "border-border hover:border-accent/50"}`}>{label}</button>)}</div>
+      {actions.isLoading ? <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /> : list.length === 0 ? <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">Nenhuma ação registrada neste filtro.</div> : <div className="space-y-2">{list.map((action) => {
+        const overdue = action.dueDate && new Date(action.dueDate) < new Date() && !["completed", "cancelled"].includes(action.status);
+        return <button key={action.id} type="button" onClick={() => openDetail(action)} className="block w-full rounded-xl border border-border p-4 text-left transition hover:border-accent/50 hover:bg-accent/5">
+          <div className="flex flex-wrap items-start justify-between gap-2"><div><div className="text-sm font-semibold">{action.situation}</div><div className="mt-1 line-clamp-2 text-xs text-muted-foreground">{action.description}</div></div><span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${overdue || action.status === "overdue" ? "bg-rose-500/10 text-rose-700" : action.status === "completed" ? "bg-emerald-500/10 text-emerald-700" : "bg-amber-500/10 text-amber-700"}`}>{overdue ? "Atrasada" : statusLabels[action.status]}</span></div>
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground"><span>Fator: {factors.find(([id]) => id === action.factorId)?.[1] ?? "Não informado"}</span><span>Origem: {originLabels[action.origin] ?? action.origin}</span><span>Responsável: {action.responsibleLabel ?? "Não definido"}</span>{action.dueDate && <span>Prazo: {new Date(action.dueDate).toLocaleDateString("pt-BR")}</span>}{action.evidence.length > 0 && <span className="inline-flex items-center gap-1"><Paperclip className="h-3 w-3" />{action.evidence.length} evidência{action.evidence.length > 1 ? "s" : ""}</span>}</div>
+        </button>;
+      })}</div>}
+      <Dialog open={Boolean(selectedAction)} onOpenChange={(open) => !open && setSelectedAction(null)}>
+        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+          {selectedAction && <>
+            <DialogHeader><DialogTitle>{selectedAction.situation}</DialogTitle></DialogHeader>
+            {editingAction ? <div className="space-y-3">
+              <div><Label>Situação / risco identificado</Label><Input className="mt-1" value={editSituation} onChange={(e) => setEditSituation(e.target.value)} /></div>
+              <div><Label>O que será feito?</Label><Textarea className="mt-1 resize-none" rows={4} value={editDescription} onChange={(e) => setEditDescription(e.target.value)} /></div>
+              <div className="grid gap-3 sm:grid-cols-3"><div><Label>Responsável</Label><Input className="mt-1" value={editResponsible} onChange={(e) => setEditResponsible(e.target.value)} /></div><div><Label>Prazo</Label><Input className="mt-1" type="date" value={editDueDate} onChange={(e) => setEditDueDate(e.target.value)} /></div><div><Label>Acompanhamento</Label><Input className="mt-1" value={editFollowUp} onChange={(e) => setEditFollowUp(e.target.value)} /></div></div>
+              <div><Label>Resultado observado</Label><Textarea className="mt-1 resize-none" rows={3} value={editResult} onChange={(e) => setEditResult(e.target.value)} placeholder="O que mudou após a execução da ação?" /></div>
+              <div className="grid gap-3 sm:grid-cols-3"><div><Label>O que mudou?</Label><Select value={editOutcome ?? ""} onValueChange={(value) => setEditOutcome(value ? value as NR1Action["outcome"] : null)}><SelectTrigger className="mt-1"><SelectValue placeholder="Avaliar resultado" /></SelectTrigger><SelectContent><SelectItem value="improved">Melhorou</SelectItem><SelectItem value="partially_improved">Melhorou parcialmente</SelectItem><SelectItem value="unchanged">Não mudou</SelectItem><SelectItem value="worsened">Piorou</SelectItem><SelectItem value="not_assessable">Não avaliável</SelectItem></SelectContent></Select></div><div><Label>Ação foi suficiente?</Label><Select value={editSufficiency || undefined} onValueChange={(value) => setEditSufficiency(value as NR1Action["sufficiency"] | "")}><SelectTrigger className="mt-1"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="pending">Pendente</SelectItem><SelectItem value="sufficient">Suficiente</SelectItem><SelectItem value="partial">Parcialmente suficiente</SelectItem><SelectItem value="insufficient">Insuficiente</SelectItem></SelectContent></Select></div><div><Label>Próxima verificação</Label><Input className="mt-1" type="date" value={editNextCheckAt} onChange={(e) => setEditNextCheckAt(e.target.value)} /></div></div>
+              <div><Label>Observações de suficiência</Label><Textarea className="mt-1 resize-none" rows={2} value={editSufficiencyNote} onChange={(e) => setEditSufficiencyNote(e.target.value)} placeholder="Explique o que ainda é necessário para resolver a situação." /></div>
+              {selectedAction.status === "cancelled" && <div><Label>Justificativa do cancelamento</Label><Textarea className="mt-1 resize-none" rows={2} value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} /></div>}
+              <div className="flex justify-end gap-2"><Button variant="ghost" onClick={() => setEditingAction(false)}>Cancelar</Button><Button onClick={() => update.mutate({ id: selectedAction.id, next: { situation: editSituation, description: editDescription, responsibleLabel: editResponsible || null, dueDate: editDueDate ? new Date(`${editDueDate}T23:59:59`).toISOString() : null, followUpMethod: editFollowUp || null, result: editResult || null, outcome: editOutcome, sufficiency: editSufficiency || null, sufficiencyNote: editSufficiencyNote || null, nextCheckAt: editNextCheckAt ? new Date(`${editNextCheckAt}T23:59:59`).toISOString() : null, cancelReason: cancelReason || null } })} disabled={update.isPending}>{update.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salvar alterações"}</Button></div>
+            </div> : <div className="space-y-4">
+              <div className="flex flex-wrap gap-2"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${selectedAction.status === "completed" ? "bg-emerald-500/10 text-emerald-700" : selectedAction.status === "cancelled" ? "bg-muted text-muted-foreground" : "bg-amber-500/10 text-amber-700"}`}>{statusLabels[selectedAction.status]}</span><span className="rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">{originLabels[selectedAction.origin] ?? selectedAction.origin}</span></div>
+              <p className="text-sm leading-relaxed text-muted-foreground">{selectedAction.description}</p>
+              <div className="grid gap-3 rounded-xl bg-muted/40 p-3 text-sm sm:grid-cols-2"><div><span className="text-muted-foreground">Fator: </span>{factors.find(([id]) => id === selectedAction.factorId)?.[1] ?? "Não informado"}</div><div><span className="text-muted-foreground">Responsável: </span>{selectedAction.responsibleLabel ?? "Não definido"}</div><div><span className="text-muted-foreground">Prazo: </span>{selectedAction.dueDate ? new Date(selectedAction.dueDate).toLocaleDateString("pt-BR") : "Não definido"}</div><div><span className="text-muted-foreground">Acompanhamento: </span>{selectedAction.followUpMethod ?? "Não definido"}</div></div>
+              {selectedAction.result && <div><Label className="text-xs">Resultado observado</Label><p className="mt-1 rounded-xl border border-border p-3 text-sm">{selectedAction.result}</p></div>}
+              {(selectedAction.outcome || selectedAction.sufficiency) && <div className="grid gap-3 rounded-xl bg-muted/40 p-3 text-sm sm:grid-cols-3"><div><span className="text-muted-foreground">O que mudou: </span>{selectedAction.outcome === "improved" ? "Melhorou" : selectedAction.outcome === "partially_improved" ? "Melhorou parcialmente" : selectedAction.outcome === "unchanged" ? "Não mudou" : selectedAction.outcome === "worsened" ? "Piorou" : selectedAction.outcome === "not_assessable" ? "Não avaliável" : "Não avaliado"}</div><div><span className="text-muted-foreground">Suficiência: </span>{selectedAction.sufficiency === "sufficient" ? "Suficiente" : selectedAction.sufficiency === "partial" ? "Parcialmente suficiente" : selectedAction.sufficiency === "insufficient" ? "Insuficiente" : "Pendente"}</div><div><span className="text-muted-foreground">Próxima verificação: </span>{selectedAction.nextCheckAt ? new Date(selectedAction.nextCheckAt).toLocaleDateString("pt-BR") : "Não definida"}</div></div>}
+              {selectedAction.sufficiencyNote && <div><Label className="text-xs">Observações de suficiência</Label><p className="mt-1 rounded-xl border border-border p-3 text-sm">{selectedAction.sufficiencyNote}</p></div>}
+              {selectedAction.cancelReason && <div><Label className="text-xs">Justificativa do cancelamento</Label><p className="mt-1 rounded-xl border border-border p-3 text-sm">{selectedAction.cancelReason}</p></div>}
+              <div className="space-y-2"><div className="flex items-center justify-between"><Label className="text-xs">Evidências anexadas</Label><span className="text-xs text-muted-foreground">{selectedAction.evidence.length} arquivo{selectedAction.evidence.length === 1 ? "" : "s"}</span></div>{selectedAction.evidence.length > 0 && <div className="space-y-1">{selectedAction.evidence.map((item, index) => <a key={`${item.uploadedAt}-${index}`} href={item.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs hover:border-accent/50"><Paperclip className="h-3.5 w-3.5 shrink-0" /><span className="truncate">{item.originalName}</span><span className="ml-auto shrink-0 text-muted-foreground">{(item.size / 1024).toFixed(0)} KB</span></a>)}</div>}<div className="flex items-center gap-2"><Input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.txt" onChange={(e) => setEvidenceFile(e.target.files?.[0] ?? null)} /><Button size="sm" onClick={() => uploadEvidence.mutate(selectedAction.id)} disabled={!evidenceFile || uploadEvidence.isPending}><Paperclip className="mr-1.5 h-4 w-4" />{uploadEvidence.isPending ? "Anexando…" : "Anexar"}</Button></div></div>
+              <div className="flex flex-wrap justify-end gap-2 border-t pt-3"><Button variant="outline" size="sm" className="text-rose-600" onClick={() => remove.mutate(selectedAction.id)} disabled={remove.isPending}><Trash2 className="mr-1.5 h-4 w-4" />Excluir</Button><Button size="sm" onClick={() => setEditingAction(true)}><Pencil className="mr-1.5 h-4 w-4" />Editar ação</Button></div>
+            </div>}
+          </>}
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }
@@ -865,6 +1024,35 @@ function FactorDetailView({
   const [contexts, setContexts] = useState<string[]>(initialAnalysis?.contexts ?? []);
   const [decision, setDecision] = useState<string | null>(initialAnalysis?.decision ?? null);
   const [saved, setSaved] = useState(false);
+  const [creatingAction, setCreatingAction] = useState(false);
+  const [actionSituation, setActionSituation] = useState("");
+  const [actionDescription, setActionDescription] = useState("");
+  const [actionResponsible, setActionResponsible] = useState("");
+  const [actionDueDate, setActionDueDate] = useState("");
+  const [actionFollowUp, setActionFollowUp] = useState("");
+
+  const createLinkedAction = useMutation({
+    mutationFn: () => api(`/organization/${orgId}/nr1/actions`, {
+      method: "POST",
+      body: {
+        surveyId,
+        factorId: factor.id,
+        factorAnalysisId: initialAnalysis?.id ?? null,
+        origin: "core_assessment",
+        situation: actionSituation,
+        description: actionDescription,
+        responsibleLabel: actionResponsible || null,
+        dueDate: actionDueDate ? new Date(`${actionDueDate}T23:59:59`).toISOString() : null,
+        followUpMethod: actionFollowUp || null,
+      },
+    }),
+    onSuccess: () => {
+      toast.success("Ação vinculada ao fator e à avaliação.");
+      setCreatingAction(false);
+      qc.invalidateQueries({ queryKey: ["nr1", "actions", orgId] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   const save = useMutation({
     mutationFn: () =>
@@ -1028,15 +1216,26 @@ function FactorDetailView({
 
         <div className="mt-3 flex items-center justify-end gap-2">
           {saved && <span className="text-[11px] text-muted-foreground">Análise salva.</span>}
-          <Button
-            size="sm"
-            onClick={() => save.mutate()}
-            disabled={save.isPending}
-          >
+          <Button size="sm" onClick={() => save.mutate()} disabled={save.isPending}>
             {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salvar análise"}
           </Button>
         </div>
       </div>
+
+      {(decision === "criar_acao" || creatingAction) && (
+        <div className="rounded-xl border border-rose-200/70 bg-rose-500/5 p-4 dark:border-rose-500/25">
+          <h4 className="text-sm font-semibold">Criar ação para este fator</h4>
+          <p className="mt-1 text-xs text-muted-foreground">
+            O fator, resultado, classificação e análise ficam vinculados automaticamente.
+          </p>
+          <div className="mt-3 space-y-3">
+            <div><Label className="text-xs">Situação identificada</Label><Input className="mt-1" value={actionSituation} onChange={(e) => setActionSituation(e.target.value)} placeholder={`Ex.: situação relacionada a ${factor.name.toLowerCase()}`} /></div>
+            <div><Label className="text-xs">O que será feito?</Label><Textarea className="mt-1 resize-none" rows={3} value={actionDescription} onChange={(e) => setActionDescription(e.target.value)} placeholder="Descreva a medida preventiva." /></div>
+            <div className="grid gap-3 sm:grid-cols-3"><div><Label className="text-xs">Responsável</Label><Input className="mt-1" value={actionResponsible} onChange={(e) => setActionResponsible(e.target.value)} placeholder="Nome ou área" /></div><div><Label className="text-xs">Prazo</Label><Input className="mt-1" type="date" value={actionDueDate} onChange={(e) => setActionDueDate(e.target.value)} /></div><div><Label className="text-xs">Acompanhamento</Label><Input className="mt-1" value={actionFollowUp} onChange={(e) => setActionFollowUp(e.target.value)} placeholder="Mensal, indicador…" /></div></div>
+            <div className="flex justify-end gap-2"><Button variant="ghost" size="sm" onClick={() => setCreatingAction(false)}>Cancelar</Button><Button size="sm" onClick={() => createLinkedAction.mutate()} disabled={createLinkedAction.isPending || !actionSituation.trim() || !actionDescription.trim()}>{createLinkedAction.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Criar ação"}</Button></div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

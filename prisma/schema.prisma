@@ -1983,6 +1983,7 @@ model NR1Survey {
 
   responses NR1Response[]
   factorAnalyses NR1FactorAnalysis[]
+  actions        NR1Action[]
 
   @@index([organizationId])
   @@map("nr1_surveys")
@@ -2015,11 +2016,84 @@ model NR1FactorAnalysis {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  survey NR1Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  survey  NR1Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  actions NR1Action[]
 
   @@unique([surveyId, factorId])
   @@index([surveyId])
   @@map("nr1_factor_analyses")
+}
+
+enum NR1ActionOrigin {
+  core_assessment
+  risk_inventory
+  existing_action_plan
+  external_assessment
+  leader_identification
+  other
+}
+
+enum NR1ActionStatus {
+  not_started
+  in_progress
+  completed
+  overdue
+  cancelled
+}
+
+enum NR1ActionOutcome {
+  improved
+  partially_improved
+  unchanged
+  worsened
+  not_assessable
+}
+
+enum NR1ActionSufficiency {
+  sufficient
+  partial
+  insufficient
+  pending
+}
+
+// Registro operacional de situação/risco e medida da equipe (Marco 08).
+model NR1Action {
+  id                String           @id @default(uuid()) @db.Uuid
+  organizationId    String           @map("organization_id") @db.Uuid
+  teamId            String?          @map("team_id") @db.Uuid
+  surveyId          String?          @map("survey_id") @db.Uuid
+  factorId          String?          @map("factor_id")
+  factorAnalysisId  String?          @map("factor_analysis_id") @db.Uuid
+  origin            NR1ActionOrigin  @default(leader_identification)
+  situation         String
+  description       String
+  responsibleUserId String?          @map("responsible_user_id") @db.Uuid
+  responsibleLabel  String?          @map("responsible_label")
+  dueDate           DateTime?        @map("due_date")
+  status            NR1ActionStatus  @default(not_started)
+  followUpMethod    String?          @map("follow_up_method")
+  result            String?
+  outcome            NR1ActionOutcome?
+  sufficiency       NR1ActionSufficiency?
+  sufficiencyNote   String?          @map("sufficiency_note")
+  nextCheckAt       DateTime?        @map("next_check_at")
+  cancelReason      String?          @map("cancel_reason")
+  evidence          Json             @default("[]")
+  history           Json             @default("[]")
+  createdBy         String?          @map("created_by") @db.Uuid
+  updatedBy         String?          @map("updated_by") @db.Uuid
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+
+  survey         NR1Survey?         @relation(fields: [surveyId], references: [id], onDelete: SetNull)
+  factorAnalysis NR1FactorAnalysis? @relation(fields: [factorAnalysisId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status])
+  @@index([organizationId, dueDate])
+  @@index([organizationId, nextCheckAt])
+  @@index([teamId])
+  @@index([surveyId])
+  @@map("nr1_actions")
 }
 
 // Link permanente por organização para denúncia anônima (não atrelado a

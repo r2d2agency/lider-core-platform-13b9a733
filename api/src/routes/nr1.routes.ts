@@ -1,5 +1,9 @@
 import { Router, type Response } from "express";
 import { z } from "zod";
+import multer from "multer";
+import path from "node:path";
+import fs from "node:fs";
+import { env } from "../env.js";
 import { randomBytes } from "node:crypto";
 import { prisma } from "../prisma.js";
 import { requireAuth } from "../auth.js";
@@ -81,6 +85,209 @@ nr1Router.param("orgId", async (req, res, next, orgId) => {
   if (!(await assertOrgAccess(req.userId!, orgId)))
     return res.status(403).json({ error: "Forbidden" });
   next();
+});
+
+const ACTION_ORIGINS = [
+  "core_assessment",
+  "risk_inventory",
+  "existing_action_plan",
+  "external_assessment",
+  "leader_identification",
+  "other",
+] as const;
+const ACTION_STATUSES = ["not_started", "in_progress", "completed", "overdue", "cancelled"] as const;
+const ACTION_OUTCOMES = ["improved", "partially_improved", "unchanged", "worsened", "not_assessable"] as const;
+const ACTION_SUFFICIENCY = ["sufficient", "partial", "insufficient", "pending"] as const;
+const actionSchema = z.object({
+  surveyId: z.string().uuid().optional().nullable(),
+  teamId: z.string().uuid().optional().nullable(),
+  factorId: z.string().min(1).max(80).optional().nullable(),
+  factorAnalysisId: z.string().uuid().optional().nullable(),
+  origin: z.enum(ACTION_ORIGINS).default("leader_identification"),
+  situation: z.string().min(2).max(500),
+  description: z.string().min(2).max(5000),
+  responsibleUserId: z.string().uuid().optional().nullable(),
+  responsibleLabel: z.string().max(160).optional().nullable(),
+  dueDate: z.string().datetime().optional().nullable(),
+  status: z.enum(ACTION_STATUSES).default("not_started"),
+  followUpMethod: z.string().max(1000).optional().nullable(),
+  result: z.string().max(5000).optional().nullable(),
+  outcome: z.enum(ACTION_OUTCOMES).optional().nullable(),
+  sufficiency: z.enum(ACTION_SUFFICIENCY).optional().nullable(),
+  sufficiencyNote: z.string().max(2000).optional().nullable(),
+  nextCheckAt: z.string().datetime().optional().nullable(),
+  cancelReason: z.string().max(1000).optional().nullable(),
+});
+const actionUpdateSchema = actionSchema.partial().omit({ origin: true });
+
+function actionDate(value: string | null | undefined) {
+  return value ? new Date(value) : null;
+}
+function appendHistory(history: unknown, event: string, userId: string) {
+  const current = Array.isArray(history) ? history : [];
+  return [...current, { event, at: new Date().toISOString(), by: userId }];
+}
+
+const NR1_EVIDENCE_MIME = new Set([
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "text/plain",
+]);
+const nr1EvidenceUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => {
+      const dir = path.join(env.UPLOADS_DIR, "nr1-evidence");
+      fs.mkdirSync(dir, { recursive: true });
+      cb(null, dir);
+    },
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase().slice(0, 10);
+      cb(null, `${Date.now()}-${randomBytes(12).toString("hex")}${/^\\.[a-z0-9]+$/.test(ext) ? ext : ".bin"}`);
+    },
+  }),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (!NR1_EVIDENCE_MIME.has(file.mimetype)) return cb(new Error("Formato não suportado. Use PDF, imagem ou TXT."));
+    cb(null, true);
+  },
+});
+
+nr1Router.post("/:orgId/nr1/actions/:id/evidence", (req, res) => {
+  nr1EvidenceUpload.single("file")(req, res, async (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    if (!req.file) return res.status(400).json({ error: "Arquivo ausente." });
+    const action = await prisma.nR1Action.findFirst({ where: { id: req.params.id, organizationId: req.params.orgId } });
+    if (!action) return res.status(404).json({ error: "Ação não encontrada." });
+    const item = {
+      url: `${(env.PUBLIC_API_URL || `${req.protocol}://${req.get("host")}`).replace(/\/$/, "")}/uploads/nr1-evidence/${req.file.filename}`,
+      path: `/uploads/nr1-evidence/${req.file.filename}`,
+      originalName: req.file.originalname,
+      mimeType: req.file.mimetype,
+      size: req.file.size,
+      uploadedAt: new Date().toISOString(),
+      uploadedBy: req.userId,
+    };
+    const evidence = Array.isArray(action.evidence) ? action.evidence : [];
+    const updated = await prisma.nR1Action.update({ where: { id: action.id }, data: { evidence: [...evidence, item], updatedBy: req.userId! } });
+    res.status(201).json({ evidence: item, action: updated });
+  });
+});
+
+nr1Router.get("/:orgId/nr1/actions", async (req, res) => {
+  const status = typeof req.query.status === "string" ? req.query.status : undefined;
+  if (status && !ACTION_STATUSES.includes(status as (typeof ACTION_STATUSES)[number])) {
+    return res.status(400).json({ error: "Status inválido." });
+  }
+  const actions = await prisma.nR1Action.findMany({
+    where: { organizationId: req.params.orgId, ...(status ? { status: status as never } : {}) },
+    orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
+  });
+  res.json(actions);
+});
+
+nr1Router.post("/:orgId/nr1/actions", async (req, res) => {
+  try {
+    const data = actionSchema.parse(req.body);
+    if (data.status === "cancelled" && !data.cancelReason?.trim()) {
+      return res.status(400).json({ error: "Ações canceladas precisam de justificativa." });
+    }
+
+    if (data.surveyId) {
+      const survey = await prisma.nR1Survey.findFirst({
+        where: { id: data.surveyId, organizationId: req.params.orgId },
+        select: { id: true, teamId: true },
+      });
+      if (!survey) return res.status(404).json({ error: "Avaliação não encontrada." });
+      if (data.teamId && survey.teamId && data.teamId !== survey.teamId) {
+        return res.status(400).json({ error: "A equipe não corresponde à avaliação." });
+      }
+    }
+
+    const action = await prisma.nR1Action.create({
+      data: {
+        organizationId: req.params.orgId,
+        surveyId: data.surveyId ?? null,
+        teamId: data.teamId ?? null,
+        factorId: data.factorId ?? null,
+        factorAnalysisId: data.factorAnalysisId ?? null,
+        origin: data.origin,
+        situation: data.situation,
+        description: data.description,
+        responsibleUserId: data.responsibleUserId ?? null,
+        responsibleLabel: data.responsibleLabel ?? null,
+        dueDate: actionDate(data.dueDate),
+        status: data.status,
+        followUpMethod: data.followUpMethod ?? null,
+        result: data.result ?? null,
+        cancelReason: data.cancelReason ?? null,
+        history: [{ event: "created", at: new Date().toISOString(), by: req.userId }],
+        createdBy: req.userId!,
+      },
+    });
+    res.status(201).json(action);
+  } catch (err) {
+    badReq(res, err);
+  }
+});
+
+nr1Router.patch("/:orgId/nr1/actions/:id", async (req, res) => {
+  try {
+    const data = actionUpdateSchema.parse(req.body);
+    const current = await prisma.nR1Action.findFirst({
+      where: { id: req.params.id, organizationId: req.params.orgId },
+    });
+    if (!current) return res.status(404).json({ error: "Ação não encontrada." });
+    if (data.status === "cancelled" && !data.cancelReason?.trim() && !current.cancelReason) {
+      return res.status(400).json({ error: "Ações canceladas precisam de justificativa." });
+    }
+    const action = await prisma.nR1Action.update({
+      where: { id: current.id },
+      data: {
+        ...(data.situation !== undefined ? { situation: data.situation } : {}),
+        ...(data.description !== undefined ? { description: data.description } : {}),
+        ...(data.teamId !== undefined ? { teamId: data.teamId ?? null } : {}),
+        ...(data.surveyId !== undefined ? { surveyId: data.surveyId ?? null } : {}),
+        ...(data.factorId !== undefined ? { factorId: data.factorId ?? null } : {}),
+        ...(data.factorAnalysisId !== undefined ? { factorAnalysisId: data.factorAnalysisId ?? null } : {}),
+        ...(data.responsibleUserId !== undefined ? { responsibleUserId: data.responsibleUserId ?? null } : {}),
+        ...(data.responsibleLabel !== undefined ? { responsibleLabel: data.responsibleLabel ?? null } : {}),
+        ...(data.dueDate !== undefined ? { dueDate: actionDate(data.dueDate) } : {}),
+        ...(data.status !== undefined ? { status: data.status } : {}),
+        ...(data.followUpMethod !== undefined ? { followUpMethod: data.followUpMethod ?? null } : {}),
+        ...(data.result !== undefined ? { result: data.result ?? null } : {}),
+        ...(data.outcome !== undefined ? { outcome: data.outcome ?? null } : {}),
+        ...(data.sufficiency !== undefined ? { sufficiency: data.sufficiency ?? null } : {}),
+        ...(data.sufficiencyNote !== undefined ? { sufficiencyNote: data.sufficiencyNote ?? null } : {}),
+        ...(data.nextCheckAt !== undefined ? { nextCheckAt: actionDate(data.nextCheckAt) } : {}),
+        ...(data.cancelReason !== undefined ? { cancelReason: data.cancelReason ?? null } : {}),
+        updatedBy: req.userId!,
+        history: appendHistory(
+          current.history,
+          data.status
+            ? `status:${data.status}`
+            : data.outcome
+              ? `outcome:${data.outcome}`
+              : data.sufficiency
+                ? `sufficiency:${data.sufficiency}`
+                : "updated",
+          req.userId!,
+        ),
+      },
+    });
+    res.json(action);
+  } catch (err) {
+    badReq(res, err);
+  }
+});
+
+nr1Router.delete("/:orgId/nr1/actions/:id", async (req, res) => {
+  const result = await prisma.nR1Action.deleteMany({
+    where: { id: req.params.id, organizationId: req.params.orgId },
+  });
+  if (!result.count) return res.status(404).json({ error: "Ação não encontrada." });
+  res.status(204).end();
 });
 
 nr1Router.get("/:orgId/nr1/surveys", async (req, res) => {
