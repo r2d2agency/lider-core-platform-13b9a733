@@ -95,7 +95,7 @@ type AttentionItem = {
   title: string;
   reason: string;
   severity: "high" | "medium" | "low";
-  kind: "one_on_one" | "feedback" | "delegation" | "ritual" | "onboarding" | "pdi";
+  kind: "one_on_one" | "feedback" | "delegation" | "ritual" | "onboarding" | "pdi" | "nr1";
   link: string | null;
 };
 
@@ -296,6 +296,47 @@ meRouter.get("/home/attention", async (req, res) => {
         severity: "medium",
         kind: "one_on_one",
         link: "/app/one-on-ones"
+      });
+    }
+
+    // 5. NR-1 — Ações de riscos psicossociais
+    const overdueActions = await prisma.nR1Action.findMany({
+      where: {
+        organizationId: orgId,
+        dueDate: { lt: now },
+        status: { notIn: ["completed", "cancelled"] },
+      },
+      select: { id: true, situation: true, dueDate: true, responsibleLabel: true },
+      take: 3,
+    });
+    for (const a of overdueActions) {
+      items.push({
+        id: `nr1-action-${a.id}`,
+        title: a.situation,
+        reason: `Ação NR-1 atrasada desde ${a.dueDate!.toLocaleDateString("pt-BR")}${a.responsibleLabel ? ` · Resp: ${a.responsibleLabel}` : ""}`,
+        severity: "high",
+        kind: "nr1",
+        link: "/app/nr1",
+      });
+    }
+
+    const upcomingChecks = await prisma.nR1Action.findMany({
+      where: {
+        organizationId: orgId,
+        status: "completed",
+        nextCheckAt: { gte: now, lte: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000) },
+      },
+      select: { id: true, situation: true, nextCheckAt: true },
+      take: 2,
+    });
+    for (const a of upcomingChecks) {
+      items.push({
+        id: `nr1-check-${a.id}`,
+        title: a.situation,
+        reason: `Verificação NR-1 agendada para ${a.nextCheckAt!.toLocaleDateString("pt-BR")}`,
+        severity: "medium",
+        kind: "nr1",
+        link: "/app/nr1",
       });
     }
 

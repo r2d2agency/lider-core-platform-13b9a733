@@ -265,6 +265,37 @@ function NR1Overview({ orgId }: { orgId: string }) {
   const needsAction = surveys.filter(
     (survey) => survey.responseCount >= 3 && !survey.actionPlan,
   ).length;
+
+  // Evolução entre ciclos: busca detalhes das 2 pesquisas mais recentes com resultados
+  const evolutionQuery = useQuery({
+    queryKey: ["nr1", "evolution", orgId],
+    queryFn: async () => {
+      const withResults = surveys.filter((s) => s.responseCount >= 3).slice(0, 2);
+      if (withResults.length < 2) return null;
+      const details = await Promise.all(
+        withResults.map((s) =>
+          api<SurveyDetail>(`/organization/${orgId}/nr1/surveys/${s.id}`),
+        ),
+      );
+      const [current, previous] = details;
+      if (!current?.factors || !previous?.factors) return null;
+
+      const variations = current.factors
+        .map((f) => {
+          const prev = previous.factors.find((p) => p.id === f.id);
+          if (!prev) return null;
+          const delta = (f.percent ?? 0) - (prev.percent ?? 0);
+          return { factor: f, delta };
+        })
+        .filter((v): v is { factor: FactorResult; delta: number } => v !== null)
+        .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+        .slice(0, 3);
+
+      return { current, previous, variations };
+    },
+    enabled: surveys.filter((s) => s.responseCount >= 3).length >= 2,
+  });
+
   return (
     <div className="space-y-5">
       <div className="grid gap-3 sm:grid-cols-3">
@@ -300,6 +331,44 @@ function NR1Overview({ orgId }: { orgId: string }) {
           </div>
         ))}
       </div>
+
+      {evolutionQuery.data && evolutionQuery.data.variations.length > 0 && (
+        <div className="rounded-2xl border border-border bg-card p-5">
+          <div className="flex items-center justify-between">
+            <h2 className="font-display text-lg">Evolução entre ciclos</h2>
+            <span className="text-xs text-muted-foreground">
+              {evolutionQuery.data.previous.title} → {evolutionQuery.data.current.title}
+            </span>
+          </div>
+          <div className="mt-3 space-y-2">
+            {evolutionQuery.data.variations.map(({ factor, delta }) => (
+              <div key={factor.id} className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background p-3">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium">{factor.name}</div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">
+                    {factor.percent?.toFixed(0) ?? "—"}% atual
+                  </div>
+                </div>
+                <span
+                  className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${
+                    delta > 0
+                      ? "bg-emerald-500/10 text-emerald-700"
+                      : delta < 0
+                        ? "bg-rose-500/10 text-rose-700"
+                        : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  {delta > 0 ? `▲ +${delta.toFixed(0)}%` : delta < 0 ? `▼ ${delta.toFixed(0)}%` : "—"}
+                </span>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Fatores com maior variação entre as duas rodadas mais recentes.
+          </p>
+        </div>
+      )}
+
       <div className="grid gap-4 lg:grid-cols-[1.2fr_.8fr]">
         <div className="rounded-2xl border border-border bg-card p-5">
           <h2 className="font-display text-xl">Próximo passo recomendado</h2>
@@ -553,12 +622,21 @@ function RiskWorkspace({ orgId }: { orgId: string }) {
 function SurveysSection({ orgId }: { orgId: string }) {
   const qc = useQueryClient();
   const [creating, setCreating] = useState(false);
+  const [creatingCycle, setCreatingCycle] = useState(false);
   const [title, setTitle] = useState("");
+  const [cycleTitle, setCycleTitle] = useState("");
+  const [cycleTeamId, setCycleTeamId] = useState("");
+  const [comparePrevious, setComparePrevious] = useState(true);
   const [openSurvey, setOpenSurvey] = useState<Survey | null>(null);
 
   const q = useQuery({
     queryKey: ["nr1", "surveys", orgId],
     queryFn: () => api<Survey[]>(`/organization/${orgId}/nr1/surveys`),
+  });
+
+  const teamsQuery = useQuery({
+    queryKey: ["teams", orgId],
+    queryFn: () => api<Array<{ id: string; name: string }>>(`/organization/${orgId}/teams`),
   });
 
   const create = useMutation({
@@ -573,44 +651,133 @@ function SurveysSection({ orgId }: { orgId: string }) {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const createCycle = useMutation({
+    mutationFn: () =>
+      api<Survey>(`/organization/${orgId}/nr1/surveys`, {
+        method: "POST",
+        body: {
+          title: cycleTitle,
+          teamId: cycleTeamId || null,
+        },
+      }),
+    onSuccess: (survey) => {
+      toast.success("Novo ciclo criado.");
+      setCycleTitle("");
+      setCycleTeamId("");
+      setCreatingCycle(false);
+      qc.invalidateQueries({ queryKey: ["nr1", "surveys", orgId] });
+      setOpenSurvey(survey);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const surveys = q.data ?? [];
+  const hasPrevious = surveys.some((s) => s.responseCount >= 3);
+  const teams = teamsQuery.data ?? [];
 
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between">
         <h2 className="font-display text-xl">Diagnóstico de riscos psicossociais</h2>
-        <Dialog open={creating} onOpenChange={setCreating}>
-          <DialogTrigger asChild>
-            <Button size="sm" className="gap-1.5">
-              <Plus className="h-3.5 w-3.5" /> Nova rodada
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Nova rodada de diagnóstico</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-2">
-              <Label>Título</Label>
-              <Input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Ex: Diagnóstico NR-1 · Equipe Comercial · Set/2026"
-              />
-            </div>
-            <DialogFooter>
-              <Button variant="ghost" onClick={() => setCreating(false)}>
-                Cancelar
+        <div className="flex gap-2">
+          <Dialog open={creatingCycle} onOpenChange={setCreatingCycle}>
+            <DialogTrigger asChild>
+              <Button size="sm" variant="outline" className="gap-1.5">
+                <Activity className="h-3.5 w-3.5" /> Novo ciclo
               </Button>
-              <Button disabled={!title || create.isPending} onClick={() => create.mutate()}>
-                {create.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  "Criar e gerar link"
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Novo ciclo de diagnóstico</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label>Título</Label>
+                  <Input
+                    value={cycleTitle}
+                    onChange={(e) => setCycleTitle(e.target.value)}
+                    placeholder="Ex: Diagnóstico NR-1 · Equipe Comercial · Out/2026"
+                  />
+                </div>
+                {teams.length > 0 && (
+                  <div className="space-y-2">
+                    <Label>Equipe (opcional)</Label>
+                    <Select value={cycleTeamId} onValueChange={setCycleTeamId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione uma equipe" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {teams.map((t) => (
+                          <SelectItem key={t.id} value={t.id}>
+                            {t.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 )}
+                {hasPrevious && (
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={comparePrevious}
+                      onChange={(e) => setComparePrevious(e.target.checked)}
+                      className="h-4 w-4 rounded border-input"
+                    />
+                    Comparar com ciclo anterior
+                  </label>
+                )}
+              </div>
+              <DialogFooter>
+                <Button variant="ghost" onClick={() => setCreatingCycle(false)}>
+                  Cancelar
+                </Button>
+                <Button
+                  disabled={!cycleTitle || createCycle.isPending}
+                  onClick={() => createCycle.mutate()}
+                >
+                  {createCycle.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    "Criar ciclo"
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+          <Dialog open={creating} onOpenChange={setCreating}>
+            <DialogTrigger asChild>
+              <Button size="sm" className="gap-1.5">
+                <Plus className="h-3.5 w-3.5" /> Nova rodada
               </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Nova rodada de diagnóstico</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-2">
+                <Label>Título</Label>
+                <Input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Ex: Diagnóstico NR-1 · Equipe Comercial · Set/2026"
+                />
+              </div>
+              <DialogFooter>
+                <Button variant="ghost" onClick={() => setCreating(false)}>
+                  Cancelar
+                </Button>
+                <Button disabled={!title || create.isPending} onClick={() => create.mutate()}>
+                  {create.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    "Criar e gerar link"
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {q.isLoading ? (
@@ -787,6 +954,51 @@ function SurveyDetailDialog({
                       {f.name} · {f.percent?.toFixed(0)}%
                     </button>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {previousFactors.length > 0 && (
+              <div className="rounded-xl border border-border p-4">
+                <h3 className="text-sm font-semibold">Comparação com ciclo anterior</h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {detail.data?.previousLabel
+                    ? `Comparando com "${detail.data.previousLabel}"`
+                    : "Comparação com a rodada anterior"}
+                </p>
+                <div className="mt-3 space-y-2">
+                  {sortedFactors.map((factor) => {
+                    const prev = previousFactors.find((p) => p.id === factor.id);
+                    if (!prev) return null;
+                    const delta = (factor.percent ?? 0) - (prev.percent ?? 0);
+                    const improved = delta > 0;
+                    const worsened = delta < 0;
+                    return (
+                      <button
+                        key={factor.id}
+                        onClick={() => setSelectedFactor(factor.id)}
+                        className="flex w-full items-center justify-between gap-3 rounded-lg border border-border bg-background p-3 text-left transition hover:border-accent/50"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-medium">{factor.name}</div>
+                          <div className="mt-0.5 text-xs text-muted-foreground">
+                            Anterior: {prev.percent?.toFixed(0) ?? "—"}% → Atual: {factor.percent?.toFixed(0) ?? "—"}%
+                          </div>
+                        </div>
+                        <span
+                          className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${
+                            improved
+                              ? "bg-emerald-500/10 text-emerald-700"
+                              : worsened
+                                ? "bg-rose-500/10 text-rose-700"
+                                : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          {delta > 0 ? `▲ +${delta.toFixed(0)}%` : delta < 0 ? `▼ ${delta.toFixed(0)}%` : "—"}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}

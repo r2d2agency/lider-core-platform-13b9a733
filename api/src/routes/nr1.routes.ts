@@ -132,6 +132,102 @@ function appendHistory(history: unknown, event: string, userId: string, note?: s
   return [...current, { event, at: new Date().toISOString(), by: userId, ...(note ? { note } : {}) }];
 }
 
+/**
+ * Sincroniza uma ação NR-1 com a Agenda do Líder (LeaderAgendaItem).
+ * A ação existe uma única vez no sistema — a agenda apenas referencia.
+ * Usa agendaItemId para rastrear o item; fallback: busca por título+source.
+ */
+async function syncActionToAgenda(
+  action: {
+    id: string;
+    situation: string;
+    description: string;
+    dueDate: Date | null;
+    status: string;
+    responsibleLabel: string | null;
+    agendaItemId: string | null;
+  },
+  orgId: string,
+  userId: string,
+) {
+  const done = action.status === "completed" || action.status === "cancelled";
+
+  // Se já tem agendaItemId, atualiza diretamente
+  if (action.agendaItemId) {
+    await prisma.leaderAgendaItem.update({
+      where: { id: action.agendaItemId },
+      data: {
+        title: action.situation,
+        detail: action.description,
+        kind: "acao",
+        scheduledAt: action.dueDate,
+        done,
+        memberLabel: action.responsibleLabel,
+      },
+    });
+    return;
+  }
+
+  // Fallback: busca por título + source nr1
+  const existing = await prisma.leaderAgendaItem.findFirst({
+    where: { organizationId: orgId, userId, title: action.situation, source: "nr1" },
+  });
+
+  if (existing) {
+    await prisma.leaderAgendaItem.update({
+      where: { id: existing.id },
+      data: {
+        detail: action.description,
+        kind: "acao",
+        scheduledAt: action.dueDate,
+        done,
+        memberLabel: action.responsibleLabel,
+      },
+    });
+    // Atualiza o agendaItemId na ação para futuras sincronizações
+    await prisma.nR1Action.update({
+      where: { id: action.id },
+      data: { agendaItemId: existing.id },
+    });
+  } else {
+    const created = await prisma.leaderAgendaItem.create({
+      data: {
+        organizationId: orgId,
+        userId,
+        title: action.situation,
+        detail: action.description,
+        kind: "acao",
+        scheduledAt: action.dueDate,
+        done,
+        memberLabel: action.responsibleLabel,
+        source: "nr1",
+      },
+    });
+    await prisma.nR1Action.update({
+      where: { id: action.id },
+      data: { agendaItemId: created.id },
+    });
+  }
+}
+
+/** Remove o item da agenda correspondente a uma ação NR-1 (se existir). */
+async function removeActionFromAgenda(
+  action: { situation: string; agendaItemId: string | null },
+  orgId: string,
+  userId: string,
+) {
+  if (action.agendaItemId) {
+    await prisma.leaderAgendaItem.deleteMany({
+      where: { id: action.agendaItemId, organizationId: orgId, userId },
+    });
+    return;
+  }
+  // Fallback: busca por título + source nr1
+  await prisma.leaderAgendaItem.deleteMany({
+    where: { organizationId: orgId, userId, title: action.situation, source: "nr1" },
+  });
+}
+
 const NR1_EVIDENCE_MIME = new Set([
   "application/pdf",
   "image/png",
@@ -230,6 +326,13 @@ nr1Router.post("/:orgId/nr1/actions", async (req, res) => {
         createdBy: req.userId!,
       },
     });
+    // Sincroniza com a Agenda do Líder (não-bloqueante)
+    try {
+      await syncActionToAgenda(action, req.params.orgId, req.userId!);
+    } catch (agendaErr) {
+      console.error("[nr1] agenda sync failed on create", agendaErr);
+    }
+
     res.status(201).json(action);
   } catch (err) {
     badReq(res, err);
@@ -281,6 +384,13 @@ nr1Router.patch("/:orgId/nr1/actions/:id", async (req, res) => {
         ),
       },
     });
+    // Sincroniza com a Agenda do Líder (não-bloqueante)
+    try {
+      await syncActionToAgenda(action, req.params.orgId, req.userId!);
+    } catch (agendaErr) {
+      console.error("[nr1] agenda sync failed on update", agendaErr);
+    }
+
     res.json(action);
   } catch (err) {
     badReq(res, err);
@@ -310,10 +420,20 @@ nr1Router.post("/:orgId/nr1/actions/:id/progress", async (req, res) => {
 });
 
 nr1Router.delete("/:orgId/nr1/actions/:id", async (req, res) => {
-  const result = await prisma.nR1Action.deleteMany({
+  const existing = await prisma.nR1Action.findFirst({
     where: { id: req.params.id, organizationId: req.params.orgId },
+    select: { situation: true, agendaItemId: true },
   });
-  if (!result.count) return res.status(404).json({ error: "Ação não encontrada." });
+  if (!existing) return res.status(404).json({ error: "Ação não encontrada." });
+
+  // Remove o item da agenda vinculado (não-bloqueante)
+  try {
+    await removeActionFromAgenda(existing, req.params.orgId, req.userId!);
+  } catch (agendaErr) {
+    console.error("[nr1] agenda sync failed on delete", agendaErr);
+  }
+
+  await prisma.nR1Action.delete({ where: { id: req.params.id } });
   res.status(204).end();
 });
 

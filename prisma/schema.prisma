@@ -2080,6 +2080,7 @@ model NR1Action {
   cancelReason      String?          @map("cancel_reason")
   evidence          Json             @default("[]")
   history           Json             @default("[]")
+  agendaItemId      String?          @map("agenda_item_id") @db.Uuid
   createdBy         String?          @map("created_by") @db.Uuid
   updatedBy         String?          @map("updated_by") @db.Uuid
   createdAt         DateTime         @default(now()) @map("created_at")
