@@ -21,6 +21,11 @@ import {
   Pencil,
   Trash2,
   X,
+  Upload,
+  FileSpreadsheet,
+  HelpCircle,
+  ClipboardList,
+  Compass,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useCurrentOrg } from "@/lib/use-current-org";
@@ -150,6 +155,130 @@ type Complaint = {
   createdAt: string;
 };
 type Channel = { token: string };
+
+// ============================================================
+// Marco 02 — modos de entrada
+// ============================================================
+
+/** Origens que só existem como documento preexistente importado (Marco 02). */
+type NR1ImportOrigin = "risk_inventory" | "existing_action_plan";
+type NR1ImportItem = {
+  situation: string;
+  description: string;
+  factorId?: string | null;
+  responsibleLabel?: string | null;
+  dueDate?: string | null;
+  followUpMethod?: string | null;
+};
+type NR1ImportResult = {
+  created: Array<{ id: string; situation: string }>;
+  skipped: Array<{ row: number; situation: string; reason: string }>;
+};
+
+/** Sugestão de primeiro passo por fator (vem do backend, Marco 02). */
+type NR1FactorSuggestion = { situation: string; description: string };
+
+/** Os 13 fatores do instrumento — fonte única para selects e para o fluxo guiado. */
+const NR1_FACTOR_CHOICES: Array<[string, string]> = [
+  ["assedio", "Assédio"],
+  ["gestao_mudancas", "Gestão de mudanças"],
+  ["clareza_papel", "Clareza de papel/função"],
+  ["reconhecimento", "Reconhecimento"],
+  ["suporte", "Suporte/apoio"],
+  ["controle_autonomia", "Controle/autonomia"],
+  ["justica_organizacional", "Justiça organizacional"],
+  ["eventos_violentos", "Eventos violentos/traumáticos"],
+  ["baixa_demanda", "Baixa demanda/subcarga"],
+  ["excesso_demandas", "Excesso de demandas"],
+  ["relacoes_trabalho", "Relações no trabalho"],
+  ["comunicacao", "Comunicação"],
+  ["trabalho_remoto", "Trabalho remoto/isolado"],
+];
+
+function nr1FactorLabel(factorId: string | null | undefined) {
+  return NR1_FACTOR_CHOICES.find(([id]) => id === factorId)?.[1] ?? null;
+}
+
+/** Campos aceitos no CSV de importação, com variação de acentuação. */
+const ACCENT_MAP: Record<string, string> = {
+  "á": "a", "à": "a", "â": "a", "ã": "a", "ä": "a",
+  "é": "e", "è": "e", "ê": "e", "ë": "e",
+  "í": "i", "ì": "i", "î": "i", "ï": "i",
+  "ó": "o", "ò": "o", "ô": "o", "õ": "o", "ö": "o",
+  "ú": "u", "ù": "u", "û": "u", "ü": "u",
+  "ç": "c",
+};
+
+/** "situação" -> "situacao": tolera CSV com ou sem acento no cabeçalho. */
+function stripAccents(value: string) {
+  let out = value;
+  for (const [accented, plain] of Object.entries(ACCENT_MAP)) {
+    out = out.split(accented).join(plain);
+  }
+  return out;
+}
+
+const IMPORT_FIELD_ALIASES: Record<string, keyof NR1ImportItem> = {
+  situacao: "situation",
+  situação: "situation",
+  descricao: "description",
+  descrição: "description",
+  fator: "factorId",
+  responsavel: "responsibleLabel",
+  responsável: "responsibleLabel",
+  prazo: "dueDate",
+  acompanhamento: "followUpMethod",
+};
+
+/**
+ * Converte CSV importado (separador `,` ou `;`) em itens de importação.
+ * Cabeçalho sem acento é aceito para reduzir erro de quem monta a planilha.
+ * Falha por linha, nunca em bloco — ver `POST /nr1/actions/import`.
+ */
+function parseImportCsv(text: string): NR1ImportItem[] {
+  const src = text.replace(/^﻿/, "");
+  if (!src.trim()) return [];
+  const firstLine = src.split(/\r?\n/, 1)[0] ?? "";
+  const sep = (firstLine.match(/;/g)?.length ?? 0) > (firstLine.match(/,/g)?.length ?? 0) ? ";" : ",";
+  const rows: string[][] = [];
+  let cur: string[] = [];
+  let field = "";
+  let inQuotes = false;
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if (inQuotes) {
+      if (c === '"' && src[i + 1] === '"') { field += '"'; i++; }
+      else if (c === '"') inQuotes = false;
+      else field += c;
+      continue;
+    }
+    if (c === '"') { inQuotes = true; continue; }
+    if (c === sep) { cur.push(field); field = ""; continue; }
+    if (c === "\r") continue;
+    if (c === "\n") { cur.push(field); rows.push(cur); cur = []; field = ""; continue; }
+    field += c;
+  }
+  if (field !== "" || cur.length) { cur.push(field); rows.push(cur); }
+  if (!rows.length) return [];
+
+  const headers = rows[0].map((h) => stripAccents(h.trim().toLowerCase()));
+  const body = rows.slice(1).filter((r) => r.some((v) => v.trim() !== ""));
+  return body.map((r) => {
+    const item: NR1ImportItem = { situation: "", description: "" };
+    headers.forEach((h, i) => {
+      const key = IMPORT_FIELD_ALIASES[h];
+      if (key) item[key] = (r[i] ?? "").trim() as never;
+    });
+    return item;
+  });
+}
+
+/** Remove tags de formatação que eventualmente venham coladas no CSV. */
+function parseImportRows(raw: string): NR1ImportItem[] {
+  const text = raw.replace(/<[^>]*>/g, "");
+  const items = parseImportCsv(text);
+  return items.filter((it) => it.situation && it.description);
+}
 
 function publicUrl(path: string, token: string) {
   if (typeof window === "undefined") return `/${path}/${token}`;
@@ -457,6 +586,8 @@ function RiskWorkspace({ orgId }: { orgId: string }) {
   const qc = useQueryClient();
   const [status, setStatus] = useState<"all" | ActionStatus>("all");
   const [creating, setCreating] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [guided, setGuided] = useState(false);
   const [situation, setSituation] = useState("");
   const [description, setDescription] = useState("");
   const [factorId, setFactorId] = useState("");
@@ -551,20 +682,22 @@ function RiskWorkspace({ orgId }: { orgId: string }) {
   const list = actions.data ?? [];
   const statusLabels: Record<ActionStatus, string> = { not_started: "Não iniciada", in_progress: "Em andamento", completed: "Concluída", overdue: "Atrasada", cancelled: "Cancelada" };
   const originLabels: Record<string, string> = { core_assessment: "Avaliação C.O.R.E.", risk_inventory: "Inventário de riscos", existing_action_plan: "Plano de ação existente", external_assessment: "Avaliação externa", leader_identification: "Identificação do líder", other: "Outra origem" };
-  const factors = [
-    ["assedio", "Assédio"], ["gestao_mudancas", "Gestão de mudanças"], ["clareza_papel", "Clareza de papel/função"], ["reconhecimento", "Reconhecimento"], ["suporte", "Suporte/apoio"], ["controle_autonomia", "Controle/autonomia"], ["justica_organizacional", "Justiça organizacional"], ["eventos_violentos", "Eventos violentos/traumáticos"], ["baixa_demanda", "Baixa demanda/subcarga"], ["excesso_demandas", "Excesso de demandas"], ["relacoes_trabalho", "Relações no trabalho"], ["comunicacao", "Comunicação"], ["trabalho_remoto", "Trabalho remoto/isolado"],
-  ];
   return (
     <section className="space-y-4 rounded-2xl border border-border bg-card p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2"><ListChecks className="h-5 w-5 text-rose-600" /><h2 className="font-display text-xl">Riscos e ações da minha equipe</h2></div>
-        <Button size="sm" onClick={() => setCreating((v) => !v)}><Plus className="mr-1.5 h-4 w-4" /> Nova ação</Button>
+        <EntryModeMenu
+          onManual={() => setCreating((v) => !v)}
+          manualOpen={creating}
+          onImported={() => setImporting(true)}
+          onGuided={() => setGuided(true)}
+        />
       </div>
       <p className="text-xs text-muted-foreground">Registre o que foi identificado, o que será feito, quem fará, até quando e como acompanhar. Uma ação concluída significa que foi executada; a suficiência será verificada no acompanhamento.</p>
       {creating && <div className="space-y-3 rounded-xl border border-border bg-background p-4">
         <div className="grid gap-3 sm:grid-cols-2">
           <div><Label>Situação / risco identificado</Label><Input className="mt-1" value={situation} onChange={(e) => setSituation(e.target.value)} placeholder="Ex.: Excesso de demandas na equipe" /></div>
-          <div><Label>Fator relacionado</Label><Select value={factorId} onValueChange={setFactorId}><SelectTrigger className="mt-1"><SelectValue placeholder="Selecione um fator" /></SelectTrigger><SelectContent>{factors.map(([id, label]) => <SelectItem key={id} value={id}>{label}</SelectItem>)}</SelectContent></Select></div>
+          <div><Label>Fator relacionado</Label><Select value={factorId} onValueChange={setFactorId}><SelectTrigger className="mt-1"><SelectValue placeholder="Selecione um fator" /></SelectTrigger><SelectContent>{NR1_FACTOR_CHOICES.map(([id, label]) => <SelectItem key={id} value={id}>{label}</SelectItem>)}</SelectContent></Select></div>
         </div>
         <div><Label>O que será feito?</Label><Textarea className="mt-1 resize-none" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Descreva a medida ou ação preventiva." /></div>
         <div className="grid gap-3 sm:grid-cols-3">
@@ -580,7 +713,7 @@ function RiskWorkspace({ orgId }: { orgId: string }) {
         const overdue = action.dueDate && new Date(action.dueDate) < new Date() && !["completed", "cancelled"].includes(action.status);
         return <button key={action.id} type="button" onClick={() => openDetail(action)} className="block w-full rounded-xl border border-border p-4 text-left transition hover:border-accent/50 hover:bg-accent/5">
           <div className="flex flex-wrap items-start justify-between gap-2"><div><div className="text-sm font-semibold">{action.situation}</div><div className="mt-1 line-clamp-2 text-xs text-muted-foreground">{action.description}</div></div><span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${overdue || action.status === "overdue" ? "bg-rose-500/10 text-rose-700" : action.status === "completed" ? "bg-emerald-500/10 text-emerald-700" : "bg-amber-500/10 text-amber-700"}`}>{overdue ? "Atrasada" : statusLabels[action.status]}</span></div>
-          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground"><span>Fator: {factors.find(([id]) => id === action.factorId)?.[1] ?? "Não informado"}</span><span>Origem: {originLabels[action.origin] ?? action.origin}</span><span>Responsável: {action.responsibleLabel ?? "Não definido"}</span>{action.dueDate && <span>Prazo: {new Date(action.dueDate).toLocaleDateString("pt-BR")}</span>}{action.evidence.length > 0 && <span className="inline-flex items-center gap-1"><Paperclip className="h-3 w-3" />{action.evidence.length} evidência{action.evidence.length > 1 ? "s" : ""}</span>}</div>
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground"><span>Fator: {nr1FactorLabel(action.factorId) ?? "Não informado"}</span><span>Origem: {originLabels[action.origin] ?? action.origin}</span><span>Responsável: {action.responsibleLabel ?? "Não definido"}</span>{action.dueDate && <span>Prazo: {new Date(action.dueDate).toLocaleDateString("pt-BR")}</span>}{action.evidence.length > 0 && <span className="inline-flex items-center gap-1"><Paperclip className="h-3 w-3" />{action.evidence.length} evidência{action.evidence.length > 1 ? "s" : ""}</span>}</div>
         </button>;
       })}</div>}
       <Dialog open={Boolean(selectedAction)} onOpenChange={(open) => !open && setSelectedAction(null)}>
@@ -599,7 +732,7 @@ function RiskWorkspace({ orgId }: { orgId: string }) {
             </div> : <div className="space-y-4">
               <div className="flex flex-wrap gap-2"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${selectedAction.status === "completed" ? "bg-emerald-500/10 text-emerald-700" : selectedAction.status === "cancelled" ? "bg-muted text-muted-foreground" : "bg-amber-500/10 text-amber-700"}`}>{statusLabels[selectedAction.status]}</span><span className="rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">{originLabels[selectedAction.origin] ?? selectedAction.origin}</span></div>
               <p className="text-sm leading-relaxed text-muted-foreground">{selectedAction.description}</p>
-              <div className="grid gap-3 rounded-xl bg-muted/40 p-3 text-sm sm:grid-cols-2"><div><span className="text-muted-foreground">Fator: </span>{factors.find(([id]) => id === selectedAction.factorId)?.[1] ?? "Não informado"}</div><div><span className="text-muted-foreground">Responsável: </span>{selectedAction.responsibleLabel ?? "Não definido"}</div><div><span className="text-muted-foreground">Prazo: </span>{selectedAction.dueDate ? new Date(selectedAction.dueDate).toLocaleDateString("pt-BR") : "Não definido"}</div><div><span className="text-muted-foreground">Acompanhamento: </span>{selectedAction.followUpMethod ?? "Não definido"}</div></div>
+              <div className="grid gap-3 rounded-xl bg-muted/40 p-3 text-sm sm:grid-cols-2"><div><span className="text-muted-foreground">Fator: </span>{nr1FactorLabel(selectedAction.factorId) ?? "Não informado"}</div><div><span className="text-muted-foreground">Responsável: </span>{selectedAction.responsibleLabel ?? "Não definido"}</div><div><span className="text-muted-foreground">Prazo: </span>{selectedAction.dueDate ? new Date(selectedAction.dueDate).toLocaleDateString("pt-BR") : "Não definido"}</div><div><span className="text-muted-foreground">Acompanhamento: </span>{selectedAction.followUpMethod ?? "Não definido"}</div></div>
               {selectedAction.result && <div><Label className="text-xs">Resultado observado</Label><p className="mt-1 rounded-xl border border-border p-3 text-sm">{selectedAction.result}</p></div>}
               {(selectedAction.outcome || selectedAction.sufficiency) && <div className="grid gap-3 rounded-xl bg-muted/40 p-3 text-sm sm:grid-cols-3"><div><span className="text-muted-foreground">O que mudou: </span>{selectedAction.outcome === "improved" ? "Melhorou" : selectedAction.outcome === "partially_improved" ? "Melhorou parcialmente" : selectedAction.outcome === "unchanged" ? "Não mudou" : selectedAction.outcome === "worsened" ? "Piorou" : selectedAction.outcome === "not_assessable" ? "Não avaliável" : "Não avaliado"}</div><div><span className="text-muted-foreground">Suficiência: </span>{selectedAction.sufficiency === "sufficient" ? "Suficiente" : selectedAction.sufficiency === "partial" ? "Parcialmente suficiente" : selectedAction.sufficiency === "insufficient" ? "Insuficiente" : "Pendente"}</div><div><span className="text-muted-foreground">Próxima verificação: </span>{selectedAction.nextCheckAt ? new Date(selectedAction.nextCheckAt).toLocaleDateString("pt-BR") : "Não definida"}</div></div>}
               {selectedAction.sufficiencyNote && <div><Label className="text-xs">Observações de suficiência</Label><p className="mt-1 rounded-xl border border-border p-3 text-sm">{selectedAction.sufficiencyNote}</p></div>}
@@ -615,7 +748,471 @@ function RiskWorkspace({ orgId }: { orgId: string }) {
           </>}
         </DialogContent>
       </Dialog>
+      <ImportDialog orgId={orgId} open={importing} onOpenChange={setImporting} />
+      <GuidedEntryDialog orgId={orgId} open={guided} onOpenChange={setGuided} />
     </section>
+  );
+}
+
+/**
+ * Seletor de modos de entrada (Marco 02). O botão "Nova ação" tradicional
+ * continua existindo — agora é um dos três caminhos, não o único.
+ */
+function EntryModeMenu({
+  onManual,
+  manualOpen,
+  onImported,
+  onGuided,
+}: {
+  onManual: () => void;
+  manualOpen: boolean;
+  onImported: () => void;
+  onGuided: () => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Button size="sm" variant="outline" className="gap-1.5" onClick={onImported}>
+        <Upload className="h-4 w-4" /> Importar inventário/plano
+      </Button>
+      <Button size="sm" variant="outline" className="gap-1.5" onClick={onGuided}>
+        <Compass className="h-4 w-4" /> Ainda não sei por onde começar
+      </Button>
+      <Button size="sm" onClick={onManual}>
+        <Plus className="mr-1.5 h-4 w-4" /> {manualOpen ? "Fechar formulário" : "Nova ação"}
+      </Button>
+    </div>
+  );
+}
+
+/**
+ * Importação de Inventário de Riscos / Plano de Ação existentes (Marco 02).
+ * Aceita CSV colado ou arquivo. A validação é linha a linha no backend — aqui
+ * só pré-visualizamos o que será enviado e mostramos o que ficou de fora.
+ */
+function ImportDialog({
+  orgId,
+  open,
+  onOpenChange,
+}: {
+  orgId: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const qc = useQueryClient();
+  const [origin, setOrigin] = useState<NR1ImportOrigin>("risk_inventory");
+  const [raw, setRaw] = useState("");
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [items, setItems] = useState<NR1ImportItem[]>([]);
+  const [result, setResult] = useState<NR1ImportResult | null>(null);
+
+  const importMutation = useMutation({
+    mutationFn: () =>
+      api<NR1ImportResult>(`/organization/${orgId}/nr1/actions/import`, {
+        method: "POST",
+        body: { origin, items },
+      }),
+    onSuccess: (data) => {
+      setResult(data);
+      qc.invalidateQueries({ queryKey: ["nr1", "actions", orgId] });
+      if (data.created.length > 0) {
+        toast.success(
+          `${data.created.length} ação${data.created.length === 1 ? "" : "s"} importada${data.created.length === 1 ? "" : "s"}.`,
+        );
+      }
+      if (data.skipped.length > 0) {
+        toast.warning(`${data.skipped.length} linha${data.skipped.length === 1 ? "" : "s"} ignorada${data.skipped.length === 1 ? "" : "s"}.`);
+      }
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const downloadTemplate = async () => {
+    try {
+      const res = await fetch(`/organization/${orgId}/nr1/actions/import/template`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("lider_core_token") ?? ""}` },
+      });
+      if (!res.ok) throw new Error("Não foi possível baixar o modelo.");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "nr1-modelo-importacao.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Não foi possível baixar o modelo.");
+    }
+  };
+
+  const applyText = (text: string, name: string | null) => {
+    const parsed = parseImportRows(text);
+    setItems(parsed);
+    setFileName(name);
+    setResult(null);
+    if (text.trim() && parsed.length === 0) {
+      toast.error("Nenhuma linha válida encontrada. Informe situação e descrição.");
+    }
+  };
+
+  const reset = () => {
+    setRaw("");
+    setItems([]);
+    setFileName(null);
+    setResult(null);
+    setOrigin("risk_inventory");
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        onOpenChange(next);
+        if (!next) reset();
+      }}
+    >
+      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <FileSpreadsheet className="h-5 w-5" /> Importar inventário ou plano de ação existente
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Você já tem um Inventário de Riscos Psicossociais ou um Plano de Ação do PGR/SST?
+            Importe-o em vez de redigir tudo de novo. Cada linha vira uma ação no módulo —
+            a ação continua existindo uma única vez no sistema e aparece na Agenda e no Hoje.
+          </p>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label>O que você está importando?</Label>
+              <Select value={origin} onValueChange={(v) => setOrigin(v as NR1ImportOrigin)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="risk_inventory">Inventário de riscos psicossociais</SelectItem>
+                  <SelectItem value="existing_action_plan">Plano de ação existente</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-end">
+              <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={downloadTemplate}>
+                <ClipboardList className="h-4 w-4" /> Baixar planilha modelo
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Conteúdo (CSV — cole da planilha ou selecione o arquivo)</Label>
+            <Textarea
+              rows={6}
+              className="resize-none font-mono text-xs"
+              value={raw}
+              onChange={(e) => applyText(e.target.value, null)}
+              placeholder={"situacao,descricao,fator,responsavel,prazo,acompanhamento\nExcesso de demandas na equipe de campo,Revisar a distribuição de tarefas,excesso_demandas,Coordenação,2026-11-30,Reunião mensal"}
+            />
+            <div className="flex items-center gap-2">
+              <Input
+                type="file"
+                accept=".csv,text/csv,text/plain"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = () => applyText(String(reader.result ?? ""), file.name);
+                  reader.readAsText(file);
+                }}
+              />
+            </div>
+            {fileName && <p className="text-xs text-muted-foreground">Arquivo: {fileName}</p>}
+          </div>
+
+          {items.length > 0 && (
+            <div className="space-y-2">
+              <Label className="text-xs">{items.length} linha{items.length === 1 ? "" : "s"} pronta{items.length === 1 ? "" : "s"} para importar</Label>
+              <div className="max-h-48 space-y-1 overflow-y-auto rounded-xl border border-border p-2">
+                {items.map((item, index) => (
+                  <div key={index} className="rounded-lg bg-muted/40 px-3 py-2 text-xs">
+                    <div className="font-medium">{item.situation}</div>
+                    <div className="mt-0.5 line-clamp-1 text-muted-foreground">{item.description}</div>
+                    <div className="mt-1 flex flex-wrap gap-x-3 text-[11px] text-muted-foreground">
+                      {nr1FactorLabel(item.factorId) && <span>Fator: {nr1FactorLabel(item.factorId)}</span>}
+                      {item.responsibleLabel && <span>Responsável: {item.responsibleLabel}</span>}
+                      {item.dueDate && <span>Prazo: {item.dueDate}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {result && (
+            <div className="space-y-2 rounded-xl border border-border p-3 text-xs">
+              {result.skipped.length > 0 && (
+                <div className="space-y-1">
+                  <p className="font-semibold text-amber-700">
+                    {result.skipped.length} linha{result.skipped.length === 1 ? "" : "s"} não importada{result.skipped.length === 1 ? "" : "s"}:
+                  </p>
+                  {result.skipped.map((s, index) => (
+                    <p key={index} className="text-muted-foreground">
+                      Linha {s.row} — {s.situation}: {s.reason}
+                    </p>
+                  ))}
+                </div>
+              )}
+              {result.created.length === 0 && result.skipped.length === 0 && (
+                <p className="text-muted-foreground">Nada foi importado.</p>
+              )}
+            </div>
+          )}
+
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button variant="ghost" onClick={() => onOpenChange(false)}>
+              {result ? "Concluir" : "Cancelar"}
+            </Button>
+            <Button
+              onClick={() => importMutation.mutate()}
+              disabled={items.length === 0 || importMutation.isPending}
+            >
+              {importMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Upload className="mr-1.5 h-4 w-4" />
+              )}
+              Importar {items.length > 0 ? `${items.length} linha${items.length === 1 ? "" : "s"}` : ""}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * Fluxo guiado "Ainda não sei por onde começar" (Marco 02).
+ * Três passos curtos que terminam em ação concreta — nunca em mais um
+ * questionário. As sugestões são estáticas (vêm do backend) para o fluxo ser
+ * instantâneo e não variar por execução.
+ */
+function GuidedEntryDialog({
+  orgId,
+  open,
+  onOpenChange,
+}: {
+  orgId: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const qc = useQueryClient();
+  const [step, setStep] = useState(0);
+  const [hasDocument, setHasDocument] = useState<string | null>(null);
+  const [selectedFactors, setSelectedFactors] = useState<string[]>([]);
+  const [suggestions, setSuggestions] = useState<Record<string, NR1FactorSuggestion>>({});
+  const [situation, setSituation] = useState("");
+  const [description, setDescription] = useState("");
+  const [dueDate, setDueDate] = useState("");
+
+  const suggestionsQuery = useQuery({
+    queryKey: ["nr1", "suggestions", orgId],
+    queryFn: () => api<Record<string, NR1FactorSuggestion>>(`/organization/${orgId}/nr1/suggestions`),
+    enabled: open,
+  });
+
+  const create = useMutation({
+    mutationFn: () =>
+      api<NR1Action>(`/organization/${orgId}/nr1/actions`, {
+        method: "POST",
+        body: {
+          origin: "leader_identification",
+          situation,
+          description,
+          factorId: selectedFactors[0] ?? null,
+          dueDate: dueDate ? new Date(`${dueDate}T23:59:59`).toISOString() : null,
+        },
+      }),
+    onSuccess: () => {
+      toast.success("Primeira ação registrada. Acompanhe a execução na aba Riscos e ações.");
+      onOpenChange(false);
+      qc.invalidateQueries({ queryKey: ["nr1", "actions", orgId] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const reset = () => {
+    setStep(0);
+    setHasDocument(null);
+    setSelectedFactors([]);
+    setSituation("");
+    setDescription("");
+    setDueDate("");
+  };
+
+  const toggleFactor = (id: string) => {
+    setSelectedFactors((prev) =>
+      prev.includes(id) ? prev.filter((f) => f !== id) : prev.length >= 3 ? prev : [...prev, id],
+    );
+  };
+
+  const useSuggestion = (factorId: string) => {
+    const suggestion = suggestions[factorId];
+    if (!suggestion) return;
+    setSituation(suggestion.situation);
+    setDescription(suggestion.description);
+    const in30 = new Date();
+    in30.setDate(in30.getDate() + 30);
+    setDueDate(in30.toISOString().slice(0, 10));
+  };
+
+  const stepTitles = ["O que você já tem?", "O que mais preocupa?", "Seu primeiro passo"];
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        onOpenChange(next);
+        if (!next) reset();
+      }}
+    >
+      <DialogContent className="max-h-[90vh] max-w-xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <HelpCircle className="h-5 w-5" /> {stepTitles[step]}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Este fluxo ajuda a registrar o primeiro risco psicossocial da equipe. As sugestões
+            são pontos de partida editáveis — a avaliação técnica e a validação final permanecem
+            com SST e o PGR.
+          </p>
+
+          {step === 0 && (
+            <div className="space-y-2">
+              {[
+                { value: "nothing", label: "Não tenho nada documentado ainda" },
+                { value: "diagnostic", label: "Tenho um diagnóstico antigo (não C.O.R.E.)" },
+                { value: "perception", label: "Tenho uma percepção da equipe, sem documento" },
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => {
+                    setHasDocument(option.value);
+                    setStep(1);
+                  }}
+                  className="w-full rounded-xl border border-border p-3 text-left text-sm transition hover:border-accent/50 hover:bg-accent/5"
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {step === 1 && (
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Selecione de 1 a 3 áreas que mais preocupam na sua equipe:
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {NR1_FACTOR_CHOICES.map(([id, label]) => {
+                  const active = selectedFactors.includes(id);
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => toggleFactor(id)}
+                      className={`rounded-full border px-3 py-1.5 text-xs transition ${
+                        active
+                          ? "border-transparent bg-accent-gradient font-semibold text-white"
+                          : "border-border hover:border-accent/50"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex justify-end">
+                <Button size="sm" onClick={() => setStep(2)} disabled={selectedFactors.length === 0}>
+                  Continuar <ArrowRight className="ml-1.5 h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {step === 2 && (
+            <div className="space-y-4">
+              {suggestionsQuery.isLoading ? (
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <Label className="text-xs">Ação sugerida — edite antes de criar</Label>
+                    {selectedFactors.map((factorId) => {
+                      const suggestion = suggestions[factorId];
+                      if (!suggestion) return null;
+                      return (
+                        <button
+                          key={factorId}
+                          type="button"
+                          onClick={() => useSuggestion(factorId)}
+                          className="w-full rounded-xl border border-border p-3 text-left transition hover:border-accent/50 hover:bg-accent/5"
+                        >
+                          <div className="text-sm font-medium">{suggestion.situation}</div>
+                          <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                            {suggestion.description}
+                          </div>
+                          <div className="mt-1 text-[11px] font-medium text-accent">
+                            Usar esta sugestão
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="space-y-3 rounded-xl border border-border bg-background p-3">
+                    <div>
+                      <Label>Situação / risco identificado</Label>
+                      <Input className="mt-1" value={situation} onChange={(e) => setSituation(e.target.value)} />
+                    </div>
+                    <div>
+                      <Label>O que será feito?</Label>
+                      <Textarea className="mt-1 resize-none" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
+                    </div>
+                    <div>
+                      <Label>Prazo (sugerido: 30 dias)</Label>
+                      <Input className="mt-1" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <Button variant="ghost" onClick={() => setStep(1)}>Voltar</Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        toast.info("Vá até Avaliações e crie um novo ciclo para ouvir a equipe.");
+                        onOpenChange(false);
+                      }}
+                    >
+                      Quero avaliar a equipe primeiro
+                    </Button>
+                    <Button
+                      onClick={() => create.mutate()}
+                      disabled={!situation.trim() || !description.trim() || create.isPending}
+                    >
+                      {create.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Criar esta ação"}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
