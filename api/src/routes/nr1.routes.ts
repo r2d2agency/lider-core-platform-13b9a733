@@ -11,6 +11,7 @@ import { notifyInApp } from "../lib/notifications.js";
 import { completeChat } from "../lib/ai-gateway.js";
 import {
   NR1_FACTORS,
+  NR1_FACTOR_SUGGESTIONS,
   NR1_MIN_RESPONSES,
   NR1_QUESTIONS,
   NR1_QUESTION_IDS,
@@ -19,6 +20,7 @@ import {
   nr1QuestionTabulation,
   type NR1Answers,
 } from "../lib/nr1-instrument.js";
+import { toCsv } from "../lib/csv.js";
 
 /**
  * NR-1 — Diagnóstico de riscos psicossociais + canal de denúncia anônima
@@ -285,6 +287,121 @@ nr1Router.get("/:orgId/nr1/actions", async (req, res) => {
     orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
   });
   res.json(actions);
+});
+
+// Origens aceitas na importação em lote (Marco 02). Só documentos que o líder
+// já traz de fora — identificação direta continua sendo "leader_identification".
+const IMPORT_ORIGINS = ["risk_inventory", "existing_action_plan"] as const;
+const importItemSchema = z.object({
+  situation: z.string().min(2).max(500),
+  description: z.string().min(2).max(5000),
+  factorId: z.string().min(1).max(80).optional().nullable(),
+  responsibleLabel: z.string().max(160).optional().nullable(),
+  dueDate: z.string().optional().nullable(),
+  followUpMethod: z.string().max(1000).optional().nullable(),
+});
+const importSchema = z.object({
+  origin: z.enum(IMPORT_ORIGINS),
+  items: z.array(importItemSchema).min(1).max(200),
+});
+
+const IMPORT_COLUMNS = [
+  "situacao",
+  "descricao",
+  "fator",
+  "responsavel",
+  "prazo",
+  "acompanhamento",
+] as const;
+
+// Template CSV servido pelo backend para o front não manter cópia hardcoded
+// que possa divergir do schema acima.
+nr1Router.get("/:orgId/nr1/actions/import/template", (_req, res) => {
+  const example = [
+    {
+      situacao: "Excesso de demandas na equipe de campo",
+      descricao:
+        "Revisar a distribuição de tarefas do turno da manhã e repactuar prazos com a área demandante.",
+      fator: "excesso_demandas",
+      responsavel: "Coordenação de Operações",
+      prazo: "", // AAAA-MM-DD
+      acompanhamento: "Reunião mensal de equipe",
+    },
+  ];
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", 'attachment; filename="nr1-modelo-importacao.csv"');
+  res.send(toCsv(example, [...IMPORT_COLUMNS]));
+});
+
+/**
+ * Importação em lote de Inventário de Riscos / Plano de Ação existentes (Marco 02).
+ *
+ * Valida item a item e não falha em bloco: uma planilha real costuma ter linhas
+ * com data inválida ou célula vazia, e impedir as outras 37 por causa de 3 seria
+ * inutilizável. A resposta devolve o que entrou e o que ficou de fora e por quê.
+ */
+nr1Router.post("/:orgId/nr1/actions/import", async (req, res) => {
+  try {
+    const data = importSchema.parse(req.body);
+    const created: Array<{ id: string; situation: string }> = [];
+    const skipped: Array<{ row: number; situation: string; reason: string }> = [];
+
+    for (const [index, item] of data.items.entries()) {
+      try {
+        // Prazo é texto livre no CSV/JSON: aceita AAAA-MM-DD e descarta o que
+        // não for data, em vez de rejeitar a linha inteira.
+        let dueDate: Date | null = null;
+        if (item.dueDate?.trim()) {
+          const parsed = new Date(item.dueDate.trim());
+          if (Number.isNaN(parsed.getTime())) {
+            throw new Error(`prazo "${item.dueDate}" não é uma data válida`);
+          }
+          dueDate = parsed;
+        }
+
+        const action = await prisma.nR1Action.create({
+          data: {
+            organizationId: req.params.orgId,
+            factorId: item.factorId ?? null,
+            origin: data.origin,
+            situation: item.situation,
+            description: item.description,
+            responsibleLabel: item.responsibleLabel ?? null,
+            dueDate,
+            followUpMethod: item.followUpMethod ?? null,
+            history: [
+              { event: "created", at: new Date().toISOString(), by: req.userId },
+              { event: "imported", at: new Date().toISOString(), by: req.userId, note: data.origin },
+            ],
+            createdBy: req.userId!,
+          },
+        });
+        // Sincroniza com a Agenda do Líder (não-bloqueante) — mesma ação única
+        // das fases anteriores, alcançada agora também pela importação.
+        try {
+          await syncActionToAgenda(action, req.params.orgId, req.userId!);
+        } catch (agendaErr) {
+          console.error("[nr1] agenda sync failed on import", agendaErr);
+        }
+        created.push({ id: action.id, situation: action.situation });
+      } catch (err) {
+        skipped.push({
+          row: index + 1,
+          situation: item.situation,
+          reason: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    res.status(201).json({ created, skipped });
+  } catch (err) {
+    badReq(res, err);
+  }
+});
+
+// Sugestões de primeiro passo por fator — alimenta o fluxo "Ainda não sei".
+nr1Router.get("/:orgId/nr1/suggestions", (_req, res) => {
+  res.json(NR1_FACTOR_SUGGESTIONS);
 });
 
 nr1Router.post("/:orgId/nr1/actions", async (req, res) => {

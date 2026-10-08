@@ -186,6 +186,82 @@ export const NR1_SCALE = [
 /** Mínimo de respostas válidas para apresentar resultados agregados (Marco 3.5). */
 export const NR1_MIN_RESPONSES = 3;
 
+/**
+ * Ações-modelo por fator — usadas pelo fluxo "Ainda não sei" (Marco 02) para
+ * sugerir um primeiro passo concreto a partir dos fatores que o líder apontou.
+ *
+ * Conteúdo estático, sem chamada de IA: o fluxo precisa ser instantâneo e uma
+ * recomendação de prevenção não pode variar por execução. O texto é ponto de
+ * partida editável, não decisão técnica — a validação permanece com SST.
+ */
+export const NR1_FACTOR_SUGGESTIONS: Record<NR1FactorId, { situation: string; description: string }> = {
+  clareza_papel: {
+    situation: "Clareza de papéis e prioridades da equipe",
+    description:
+      "Revisitar com cada pessoa as responsabilidades da função e as prioridades do período, registrando por escrito o que é esperado. Padronizar as orientações dadas pela liderança para que não sejam contraditórias entre si.",
+  },
+  excesso_demandas: {
+    situation: "Sobrecarga e prazos da equipe",
+    description:
+      "Mapear o volume de atividades e os prazos do período com a equipe, identificar os gargalos e repactuar o que é possível. Registrar o que ficou fora da repactuação para decisão do nível apropriado.",
+  },
+  baixa_demanda: {
+    situation: "Subutilização de competências na equipe",
+    description:
+      "Identificar conhecimentos e habilidades disponíveis na equipe que não estão sendo usados e buscar com o gestor a realocação de atividades ou novos desafios compatíveis com a função.",
+  },
+  controle_autonomia: {
+    situation: "Autonomia e participação nas decisões",
+    description:
+      "Ampliar o espaço de decisão da equipe sobre como executar o próprio trabalho e criar um canal recorrente para ouvir a opinião das pessoas antes de decisões que as afetem, devolvendo o que foi acatado e o que não foi.",
+  },
+  justica_organizacional: {
+    situation: "Transparência de critérios nas decisões",
+    description:
+      "Tornar explícitos os critérios usados em decisões que afetam a equipe (tarefas, reconhecimento, ajustes) e aplicar esses critérios de forma consistente entre as pessoas. Explicar o motivo das decisões relevantes.",
+  },
+  reconhecimento: {
+    situation: "Reconhecimento pelo trabalho realizado",
+    description:
+      "Instituir uma rotina de reconhecimento — verbal e por escrito — pelas entregas e pelo esforço da equipe, com critérios claros e alcance que não beneficie sempre as mesmas pessoas.",
+  },
+  suporte: {
+    situation: "Apoio da liderança no dia a dia",
+    description:
+      "Ampliar a disponibilidade da liderança para apoiar a equipe em problemas e necessidades de aprendizado, com momentos fixos de conversa e encaminhamento concreto das demandas trazidas.",
+  },
+  comunicacao: {
+    situation: "Comunicação de informações da organização",
+    description:
+      "Garantir que as informações relevantes da organização cheguem à equipe por um canal definido, em linguagem clara e no momento adequado, com espaço para perguntas e esclarecimento de dúvidas.",
+  },
+  relacoes_trabalho: {
+    situation: "Convívio e conflitos na equipe",
+    description:
+      "Atuar nos conflitos existentes com conversas individuais antes de expor publicamente, reforçar combinados de convivência e dar retorno imediato a situações de desrespeito entre a equipe.",
+  },
+  trabalho_remoto: {
+    situation: "Isolamento em modelo de trabalho distribuído",
+    description:
+      "Criar momentos regulares de contato entre a equipe e a liderança que não sejam apenas prestação de contas de tarefas, e garantir que quem está a distância receba as mesmas informações de quem está presencial.",
+  },
+  gestao_mudancas: {
+    situation: "Condução de mudanças organizacionais",
+    description:
+      "Antecipar à equipe as mudanças que impactam seu trabalho, explicando o motivo, o que muda na prática e o que não muda, mantendo um ponto de contato para dúvidas durante a transição.",
+  },
+  eventos_violentos: {
+    situation: "Prevenção de situações de violência no trabalho",
+    description:
+      "Reforçar com a equipe os canais e os procedimentos de segurança para situações de ameaça ou agressão, inclusive no atendimento a terceiros, e acionar SST e as áreas responsáveis para avaliar as medidas de proteção adequadas.",
+  },
+  assedio: {
+    situation: "Prevenção e resposta a assédio no trabalho",
+    description:
+      "Reforçar com a equipe a existência e o sigilo do canal de denúncias, deixar claro o posicionamento da liderança contra qualquer forma de assédio e acionar SST e as áreas competentes para conduzir apurações — a liderança não investiga casos sozinha.",
+  },
+};
+
 const NR1_MESSAGES = {
   insufficient:
     "Ainda não há respostas suficientes para apresentar o resultado de forma agregada e preservar a confidencialidade da equipe.",
