@@ -34,6 +34,14 @@ import {
   PanelLeftOpen,
   ShieldAlert,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { Logo } from "@/components/brand/Logo";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
@@ -181,7 +189,6 @@ const mobileNav = [
   { to: "/app/team", label: "Equipe", icon: Users, module: "consciencia" },
   { to: "/app/notes", label: "Notas", icon: NotebookPen, module: "*" },
   { to: "/app/ai", label: "Assistente IA", icon: Sparkles, module: "*" },
-  { to: "/app/help", label: "Mais", icon: MoreHorizontal, module: "*" },
 ] as const;
 
 const conscienciaOnlyNav = [
@@ -621,12 +628,64 @@ function AppShell() {
             )}
             <TeamHealthPill orgId={orgId} />
             <NotificationBell />
-            <div
-              className="grid h-9 w-9 place-items-center overflow-hidden rounded-full bg-secondary text-sm font-medium ring-2"
-              style={{ borderColor: "var(--pilar-c)" }}
-            >
-              <Logo variant="mark" className="h-8 w-8 rounded-full" />
-            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Conta e configurações"
+                  className="grid h-9 w-9 cursor-pointer place-items-center overflow-hidden rounded-full bg-secondary text-sm font-medium ring-2 transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  style={{ borderColor: "var(--pilar-c)" }}
+                >
+                  {initials || <Logo variant="mark" className="h-8 w-8 rounded-full" />}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuLabel className="flex flex-col gap-0.5">
+                  <span className="truncate text-sm font-medium text-foreground">
+                    {user?.fullName ?? "Sem nome"}
+                  </span>
+                  <span className="truncate text-xs font-normal text-muted-foreground">
+                    {user?.email}
+                  </span>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link to="/app/profile" search={{}}>
+                    <UserCircle2 className="h-4 w-4" />
+                    Perfil
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/app/settings" search={{}}>
+                    <Settings2 className="h-4 w-4" />
+                    Configurações
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/app/nr1" search={{}}>
+                    <ShieldAlert className="h-4 w-4" />
+                    NR-1 e riscos psicossociais
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/app/notifications" search={{}}>
+                    <Bell className="h-4 w-4" />
+                    Notificações
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/app/help" search={{}}>
+                    <HelpCircle className="h-4 w-4" />
+                    Ajuda
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => void handleSignOut()} className="text-destructive">
+                  <LogOut className="h-4 w-4" />
+                  Sair
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </header>
         <div className="sticky top-[61px] z-20 border-b border-border/60 bg-background/92 backdrop-blur md:top-[73px]">
@@ -715,22 +774,6 @@ function AppShell() {
           <ul className="mx-auto flex max-w-3xl items-center" style={{ width: "100%" }}>
             {visibleMobileNav.map(({ to, label, icon: Icon }) => {
               const active = isActiveRoute(to);
-              if (label === "Mais") {
-                return (
-                  <li key="mobile-more" className="flex-1">
-                    <button
-                      type="button"
-                      onClick={() => setMoreOpen(true)}
-                      className="flex w-full cursor-pointer flex-col items-center gap-1 py-2.5 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      <span className="grid h-9 w-9 place-items-center rounded-full">
-                        <Icon className="h-5 w-5" strokeWidth={1.75} />
-                      </span>
-                      {label}
-                    </button>
-                  </li>
-                );
-              }
               return (
                 <li key={to} className="flex-1">
                   <Link

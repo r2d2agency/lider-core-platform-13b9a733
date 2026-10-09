@@ -187,6 +187,43 @@
   --sidebar-ring: oklch(0.76 0.17 55);
 }
 
+/*
+ * Tailwind Typography (@tailwindcss/typography) declara as cores do `prose`
+ * com variáveis --tw-prose-* e, por padrão, as fixa em cinzas da paleta do
+ * plugin — que não trocam com o tema. No tema escuro isso deixava o texto da
+ * resposta da IA cinza-claro sobre fundo escuro (ilegível).
+ *
+ * O plugin declara esses valores no próprio seletor `.prose`, então `:root`
+ * e `.dark` NÃO bastam: a declaração do `.prose` é mais específica e vence a
+ * herdada. Por isso redefinimos aqui, em um `.prose` com especificidade
+ * suficiente para ganhar dele, apontando tudo para as cores do design system.
+ */
+.prose.prose,
+.dark .prose.prose {
+  --tw-prose-body: var(--card-foreground);
+  --tw-prose-headings: var(--foreground);
+  --tw-prose-lead: var(--muted-foreground);
+  --tw-prose-links: var(--accent);
+  --tw-prose-bold: var(--foreground);
+  --tw-prose-counters: var(--muted-foreground);
+  --tw-prose-bullets: var(--muted-foreground);
+  --tw-prose-hr: var(--border);
+  --tw-prose-quotes: var(--foreground);
+  --tw-prose-quote-borders: var(--border);
+  --tw-prose-captions: var(--muted-foreground);
+  --tw-prose-code: var(--foreground);
+  --tw-prose-pre-code: var(--card-foreground);
+  --tw-prose-pre-bg: var(--muted);
+  --tw-prose-th-borders: var(--border);
+  --tw-prose-td-borders: var(--border);
+}
+
+/* O bloco pre/code precisa de fundo, não apenas cor de texto. */
+.prose :where(pre) {
+  background-color: var(--muted);
+  color: var(--card-foreground);
+}
+
 @layer base {
   * {
     border-color: var(--color-border);
