@@ -148,6 +148,8 @@ export const authApi = {
       { method: "POST", body: { email, password, fullName, planSlug, inviteToken }, auth: false },
     ),
   me: () => api<Me>("/auth/me", { method: "GET" }),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    api<{ ok: true }>("/auth/me/password", { method: "POST", body: { currentPassword, newPassword } }),
   permissions: () =>
     api<{ roles: string[]; grants: { resource: string; action: string }[]; super: boolean }>(
       "/auth/me/permissions",

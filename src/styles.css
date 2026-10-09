@@ -86,6 +86,8 @@
 
 :root {
   --radius: 0.75rem;
+  /* Controles nativos (scrollbar, inputs, date pickers) seguem o tema. */
+  color-scheme: light;
   /* Base clara e neutra, inspirada no mockup */
   --background: oklch(0.99 0.003 250);
   --foreground: oklch(0.19 0.02 260);
@@ -144,6 +146,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --background: oklch(0.16 0.015 260);
   --foreground: oklch(0.96 0.008 250);
   --card: oklch(0.2 0.015 260);

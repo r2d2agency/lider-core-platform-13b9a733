@@ -14,7 +14,9 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AuthProvider } from "@/lib/auth-context";
+import { AppearanceProvider } from "@/lib/appearance-context";
 import { Toaster } from "@/components/ui/sonner";
+import { UpdateBanner } from "@/components/update-banner";
 
 declare global {
   interface Window {
@@ -23,6 +25,9 @@ declare global {
     __liderCorePointerEventsGuardInstalled?: boolean;
   }
 }
+
+// Identificador do build, injetado por `vite.config.ts`.
+declare const __APP_BUILD__: string;
 
 const reportedErrors = new WeakSet<object>();
 
@@ -267,7 +272,30 @@ function RootShell({ children }: { children: ReactNode }) {
             `,
           }}
         />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              // Aplica tema e tamanho de fonte antes do primeiro paint, para não
+              // haver flash de tema claro em quem usa escuro. Os valores são os
+              // mesmos persistidos por AppearanceProvider (src/lib/appearance-context.tsx).
+              (function () {
+                try {
+                  var theme = localStorage.getItem('lider_core_theme') || 'system';
+                  var dark = theme === 'dark' ||
+                    (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                  if (dark) document.documentElement.classList.add('dark');
+                  var scale = localStorage.getItem('lider_core_font_scale');
+                  if (scale === 'sm') document.documentElement.style.fontSize = '14px';
+                  else if (scale === 'lg') document.documentElement.style.fontSize = '17.5px';
+                  else if (scale === 'xl') document.documentElement.style.fontSize = '19px';
+                } catch (e) {}
+              })();
+            `,
+          }}
+        />
         <meta name="google" content="notranslate" />
+        {/* Identificador deste build — usado por useAppUpdate para detectar versão nova. */}
+        <meta name="app-build" content={__APP_BUILD__} />
         <HeadContent />
       </head>
       <body className="notranslate" translate="no" suppressHydrationWarning>
@@ -297,11 +325,14 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <ClientOnly fallback={<BootSplash />}>
-        <AuthProvider>
-          {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-          <Outlet />
-          <Toaster />
-        </AuthProvider>
+        <AppearanceProvider>
+          <AuthProvider>
+            <Outlet />
+            {/* Aviso de nova versão disponível — some depois que o usuário atualiza. */}
+            <UpdateBanner />
+            <Toaster />
+          </AuthProvider>
+        </AppearanceProvider>
       </ClientOnly>
     </QueryClientProvider>
   );

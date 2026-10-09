@@ -221,6 +221,48 @@ authRouter.get("/me", requireAuth, async (req, res) => {
   }
 });
 
+// -----------------------------------------------------------
+// Troca de senha do próprio usuário logado. Exige a senha atual
+// para evitar que uma sessão aberta em dispositivo alheio mude
+// a credencial sem o consentimento de quem possui a conta.
+// -----------------------------------------------------------
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(8),
+});
+
+authRouter.post("/me/password", requireAuth, async (req, res) => {
+  try {
+    const parsed = changePasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const passwordIssue = parsed.error.issues.find((i) => i.path.includes("newPassword"));
+      if (passwordIssue) return res.status(400).json({ error: "A nova senha precisa ter no mínimo 8 caracteres." });
+      return res.status(400).json({ error: "Informe a senha atual e a nova senha." });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId! },
+      select: { id: true, passwordHash: true },
+    });
+    if (!user) return res.status(404).json({ error: "Usuário não encontrado." });
+
+    const ok = await bcrypt.compare(parsed.data.currentPassword, user.passwordHash);
+    if (!ok) return res.status(400).json({ error: "A senha atual está incorreta." });
+
+    if (parsed.data.currentPassword === parsed.data.newPassword) {
+      return res.status(400).json({ error: "A nova senha precisa ser diferente da atual." });
+    }
+
+    const passwordHash = await bcrypt.hash(parsed.data.newPassword, 10);
+    await prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
+
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("[auth] falha ao trocar senha", err);
+    return res.status(500).json({ error: "Não foi possível trocar a senha agora. Tente novamente em instantes." });
+  }
+});
+
 authRouter.get("/me/permissions", requireAuth, async (req, res) => {
   const perms = await resolveUserPermissions(req.userId!);
   res.json(perms);

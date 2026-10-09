@@ -14,4 +14,12 @@ export default defineConfig({
   },
   // Self-hosted on EasyPanel: build a Node server instead of a Cloudflare Worker.
   nitro: { preset: "node-server" },
+  vite: {
+    define: {
+      // Identificador único de cada build, embutido no <meta name="app-build">.
+      // O hook useAppUpdate compara esse valor com o do HTML servido para avisar
+      // que existe versão nova (não usamos service worker — ver o comentário lá).
+      __APP_BUILD__: JSON.stringify(String(Date.now())),
+    },
+  },
 });
