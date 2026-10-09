@@ -379,7 +379,6 @@ function NR1Page() {
         </TabsContent>
         <TabsContent value="risks" className="space-y-7">
           <RiskWorkspace orgId={orgId} />
-          <SurveysSection orgId={orgId} />
         </TabsContent>
         <TabsContent value="channel" className="space-y-7">
           <ComplaintChannelSection orgId={orgId} />
