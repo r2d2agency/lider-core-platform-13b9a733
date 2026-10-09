@@ -57,6 +57,13 @@ export const Route = createFileRoute("/_authenticated/app/nr1")({
 });
 
 type SurveyStatus = "open" | "closed";
+/**
+ * Mínimo de respostas para liberar resultados. Espelha
+ * NR1_MIN_RESPONSES em api/src/lib/nr1-instrument.ts — a IA e o
+ * detalhe da rodada usam o mesmo piso para proteger o anonimato.
+ */
+const NR1_MIN = 3;
+
 type Survey = {
   id: string;
   title: string;
@@ -1274,8 +1281,15 @@ function SurveysSection({ orgId }: { orgId: string }) {
 
   return (
     <section className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h2 className="font-display text-xl">Diagnóstico de riscos psicossociais</h2>
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h2 className="font-display text-xl">Diagnóstico de riscos psicossociais</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Clique em <strong>Ver resultados</strong> para ver as respostas já recebidas, os
+            alertas de fator e as ações geradas. Os resultados só aparecem a partir de 3 respostas
+            — é o que garante o anonimato.
+          </p>
+        </div>
         <div className="flex gap-2">
           <Dialog open={creatingCycle} onOpenChange={setCreatingCycle}>
             <DialogTrigger asChild>
@@ -1399,9 +1413,30 @@ function SurveysSection({ orgId }: { orgId: string }) {
                   <span className="truncate font-medium">{s.title}</span>
                   <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 </button>
-                <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  <span>{s.responseCount} resposta(s)</span>
-                  {s.avgScore != null && <span>· média {s.avgScore.toFixed(1)}/5</span>}
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="rounded-full border border-border bg-background/80 px-2.5 py-1 font-semibold tabular-nums text-foreground">
+                      {s.responseCount} resposta(s)
+                    </span>
+                    {s.avgScore != null && (
+                      <span className="text-muted-foreground">· média {s.avgScore.toFixed(1)}/5</span>
+                    )}
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8 gap-1.5 text-xs"
+                    onClick={() => setOpenSurvey(s)}
+                  >
+                    Ver resultados
+                    {s.responseCount > 0 && s.responseCount < NR1_MIN && (
+                      <span className="text-muted-foreground">
+                        · falta {NR1_MIN - s.responseCount}
+                      </span>
+                    )}
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </Button>
                 </div>
               </div>
               <div className="mt-3">
@@ -1496,6 +1531,7 @@ function SurveyDetailDialog({
     (f) => f.classification === "prioridade" || f.classification === "atencao",
   );
   const order = { prioridade: 0, atencao: 1, muito_favoravel: 2 } as const;
+  const reportCount = detail.data?.responseCount ?? survey.responseCount;
   const sortedFactors = [...factors].sort(
     (a, b) =>
       (order[a.classification ?? "muito_favoravel"] - order[b.classification ?? "muito_favoravel"]) ||
@@ -1507,9 +1543,16 @@ function SurveyDetailDialog({
       <DialogHeader>
         <DialogTitle>{survey.title}</DialogTitle>
         <p className="text-xs text-muted-foreground">
-          {detail.data?.resultAvailable
-            ? `Resultado agregado · ${detail.data.previousLabel ? `Comparação com "${detail.data.previousLabel}"` : "Ainda não há uma avaliação anterior para comparação."}`
-            : "Resultado das respostas anônimas da equipe."}
+          {detail.isLoading
+            ? "Carregando…"
+            : `${reportCount} resposta(s) anônima(s)` +
+              (detail.data?.resultAvailable
+                ? ` · ${
+                    detail.data.previousLabel
+                      ? `comparando com "${detail.data.previousLabel}"`
+                      : "ainda não há avaliação anterior"
+                  }`
+                : ` · resultados liberados a partir de ${NR1_MIN} respostas`)}
         </p>
       </DialogHeader>
 
