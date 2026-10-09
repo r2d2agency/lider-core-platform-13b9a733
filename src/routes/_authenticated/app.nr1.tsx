@@ -20,7 +20,6 @@ import {
   Paperclip,
   Pencil,
   Trash2,
-  X,
   Upload,
   FileSpreadsheet,
   HelpCircle,
@@ -132,6 +131,7 @@ type NR1Action = {
   description: string;
   origin: string;
   factorId: string | null;
+  responsibleUserId: string | null;
   responsibleLabel: string | null;
   dueDate: string | null;
   status: ActionStatus;
