@@ -33,7 +33,7 @@ export function ImageUploader({
       }
       setUploading(true);
       try {
-        const res = await uploadFile("/admin/uploads", file);
+        const res = await uploadFile<{ url: string }>("/admin/uploads", file);
         onChange(res.url);
         toast.success("Arquivo enviado.");
       } catch (err) {

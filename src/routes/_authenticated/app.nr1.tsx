@@ -25,8 +25,10 @@ import {
   HelpCircle,
   ClipboardList,
   Compass,
+  Download,
 } from "lucide-react";
 import { api } from "@/lib/api";
+import { downloadCsv, toCsv } from "@/lib/csv-export";
 import { useCurrentOrg } from "@/lib/use-current-org";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -105,6 +107,8 @@ type SurveyDetail = Survey & {
   previousLabel: string | null;
   previousFactors: FactorResult[];
   factorAnalyses: FactorAnalysis[];
+  /** Análise de IA já gerada para esta rodada (persistida no servidor). */
+  aiAnalysis: AIAnalysis | null;
 };
 type AIAnalysis = {
   summary: string;
@@ -1525,6 +1529,66 @@ function SurveyDetailDialog({
   const factors = detail.data?.factors ?? [];
   const previousFactors = detail.data?.previousFactors ?? [];
   const analyses = detail.data?.factorAnalyses ?? [];
+  // A análise de IA fica persistida na rodada: reabrir o diálogo não pode
+  // perder o trabalho do líder, então o que acabou de chegar tem precedência
+  // sobre o que já estava salvo.
+  const shownAiAnalysis = aiAnalysis ?? detail.data?.aiAnalysis ?? null;
+
+  /**
+   * Exporta o resultado agregado da rodada. Duas tabelas num só arquivo: a
+   * visão por fator (com a comparação com o ciclo anterior) e o detalhamento
+   * das 33 perguntas. Só entram dados agregados — nenhuma resposta
+   * individual, para não furar o anonimato.
+   */
+  const exportSurveyCsv = () => {
+    const slug = (survey.title || "nr1")
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/[^a-zA-Z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .toLowerCase();
+    const stamp = new Date().toISOString().slice(0, 10);
+    const label: Record<string, string> = {
+      muito_favoravel: "Muito favorável",
+      atencao: "Atenção",
+      prioridade: "Prioridade",
+    };
+    const factorRows = sortedFactors.map((f) => {
+      const prev = previousFactors.find((p) => p.id === f.id);
+      const delta = prev ? (f.percent ?? 0) - (prev.percent ?? 0) : null;
+      return {
+        fator: f.name,
+        percentual: f.percent != null ? f.percent.toFixed(1) : "",
+        classificacao: label[f.classification ?? ""] ?? "",
+        respostas_validas: f.validCount,
+        ciclo_anterior: prev?.percent != null ? prev.percent.toFixed(1) : "",
+        variacao: delta != null ? delta.toFixed(1) : "",
+        analise_lider: analyses.find((a) => a.factorId === f.id)?.text ?? "",
+      };
+    });
+    const questionRows = t.map((q) => ({
+      pergunta: q.label,
+      fatores: (q.factors ?? []).join(", "),
+      percentual: q.percent != null ? q.percent.toFixed(1) : "",
+      media: q.average != null ? q.average.toFixed(2) : "",
+    }));
+    const csv = toCsv(factorRows, [
+      { key: "fator", label: "Fator" },
+      { key: "percentual", label: "Percentual" },
+      { key: "classificacao", label: "Classificação" },
+      { key: "respostas_validas", label: "Respostas válidas" },
+      { key: "ciclo_anterior", label: "Ciclo anterior (%)" },
+      { key: "variacao", label: "Variação (p.p.)" },
+      { key: "analise_lider", label: "Análise do líder" },
+    ]);
+    const csvQ = toCsv(questionRows, [
+      { key: "pergunta", label: "Pergunta" },
+      { key: "fatores", label: "Fatores" },
+      { key: "percentual", label: "Percentual" },
+      { key: "media", label: "Média" },
+    ]);
+    downloadCsv(`nr1-${slug}-${stamp}.csv`, `${csv}\n\n${csvQ}`);
+  };
   const [selectedFactor, setSelectedFactor] = useState<string | null>(null);
   const attentionFactors = factors.filter(
     (f) => f.classification === "prioridade" || f.classification === "atencao",
@@ -1706,11 +1770,11 @@ function SurveyDetailDialog({
                 Analisar resultados
               </Button>
             </div>
-            {aiAnalysis && (
+            {shownAiAnalysis && (
               <div className="mt-4 space-y-3 text-sm">
-                <p>{aiAnalysis.summary}</p>
+                <p>{shownAiAnalysis.summary}</p>
                 <ul className="space-y-2">
-                  {aiAnalysis.priorities.map((priority) => (
+                  {shownAiAnalysis.priorities.map((priority) => (
                     <li key={priority.factor} className="rounded-lg bg-background/80 p-3">
                       <div className="font-semibold">{priority.factor}</div>
                       <div className="mt-1 text-xs text-muted-foreground">{priority.evidence}</div>
@@ -1726,16 +1790,16 @@ function SurveyDetailDialog({
                       item.name
                         .toLowerCase()
                         .includes(
-                          aiAnalysis.recommendedNextAssessment.id === "completo"
+                          shownAiAnalysis.recommendedNextAssessment.id === "completo"
                             ? "completo"
-                            : aiAnalysis.recommendedNextAssessment.id === "pulso"
+                            : shownAiAnalysis.recommendedNextAssessment.id === "pulso"
                               ? "pulso"
-                              : aiAnalysis.recommendedNextAssessment.id === "lideranca"
+                              : shownAiAnalysis.recommendedNextAssessment.id === "lideranca"
                                 ? "liderança"
                                 : "assédio",
                         ),
-                    )?.name ?? aiAnalysis.recommendedNextAssessment.id}
-                    . {aiAnalysis.recommendedNextAssessment.reason}
+                    )?.name ?? shownAiAnalysis.recommendedNextAssessment.id}
+                    . {shownAiAnalysis.recommendedNextAssessment.reason}
                   </div>
                 </div>
               </div>
@@ -1761,14 +1825,25 @@ function SurveyDetailDialog({
       </div>
 
       <DialogFooter className="flex-row justify-between sm:justify-between">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => toggleStatus.mutate()}
-          disabled={toggleStatus.isPending}
-        >
-          {survey.status === "open" ? "Encerrar rodada" : "Reabrir rodada"}
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={exportSurveyCsv}
+            disabled={!detail.data?.resultAvailable}
+          >
+            <Download className="h-4 w-4" /> Exportar CSV
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => toggleStatus.mutate()}
+            disabled={toggleStatus.isPending}
+          >
+            {survey.status === "open" ? "Encerrar rodada" : "Reabrir rodada"}
+          </Button>
+        </div>
         <Button variant="ghost" onClick={onClose}>
           Fechar
         </Button>

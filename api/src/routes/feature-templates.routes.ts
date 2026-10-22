@@ -7,7 +7,14 @@ import { FEATURE_CATALOG, TEMPLATE_DEFAULTS, type FeatureAction } from "../lib/f
 export const featureTemplatesRouter = Router();
 featureTemplatesRouter.use(requireAuth);
 
-const ROLES = ["super_admin", "neo_admin", "franchise_owner", "hr_admin", "leader", "collaborator"] as const;
+const ROLES = [
+  "super_admin",
+  "neo_admin",
+  "franchise_owner",
+  "hr_admin",
+  "leader",
+  "collaborator",
+] as const;
 type Role = (typeof ROLES)[number];
 
 async function isSuperAdmin(userId: string) {
@@ -139,11 +146,21 @@ export async function bootstrapFeatureTemplates() {
       const def = TEMPLATE_DEFAULTS[role];
       if (!def) continue;
       const existing = await prisma.featureTemplate.findUnique({ where: { role } });
-      if (existing) continue; // não sobrescreve edições do admin
-      const t = await prisma.featureTemplate.create({
-        data: { role, name: def.name, description: def.description },
-      });
-      const rows: { templateId: string; featureKey: string; action: FeatureAction; enabled: boolean }[] = [];
+      // Template já existe: não sobrescreve o que o admin editou, mas as
+      // features novas do catálogo (ex.: o módulo NR-1) precisam entrar — sem
+      // esta linha, elas nunca apareceriam no template e o gating ficaria
+      // fechado para todo mundo.
+      const t =
+        existing ??
+        (await prisma.featureTemplate.create({
+          data: { role, name: def.name, description: def.description },
+        }));
+      const rows: {
+        templateId: string;
+        featureKey: string;
+        action: FeatureAction;
+        enabled: boolean;
+      }[] = [];
       for (const mod of FEATURE_CATALOG) {
         for (const feat of mod.features) {
           const enabledActions = def.enabled[feat.key] ?? [];
@@ -158,6 +175,8 @@ export async function bootstrapFeatureTemplates() {
         }
       }
       if (rows.length) {
+        // `skipDuplicates` mantém intactas as linhas que o admin já ajustou;
+        // só entram as que faltavam.
         await prisma.featureTemplateItem.createMany({ data: rows, skipDuplicates: true });
       }
     }

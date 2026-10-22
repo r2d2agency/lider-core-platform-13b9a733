@@ -115,6 +115,10 @@ app.use(
     maxAge: "7d",
     setHeaders: (res) => {
       res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+      // Uploaded evidence may be user-supplied content: never let the
+      // browser sniff it into HTML/SVG and execute it on our origin.
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
     },
   }),
 );
@@ -319,6 +323,7 @@ async function bootstrapDefaultModules() {
     { code: "benchmark", name: "Benchmark", category: "analytics" as const, orderIndex: 8 },
     { code: "feedback", name: "Feedback 360º", category: "people" as const, orderIndex: 9 },
     { code: "pdi", name: "PDI", category: "people" as const, orderIndex: 10 },
+    { code: "nr1", name: "NR-1", category: "people" as const, orderIndex: 11 },
   ];
   try {
     for (const m of defaults) {

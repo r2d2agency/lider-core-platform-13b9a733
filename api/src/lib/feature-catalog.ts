@@ -108,13 +108,65 @@ export const FEATURE_CATALOG: ModuleDef[] = [
       },
     ],
   },
+  {
+    code: "nr1",
+    name: "NR-1",
+    features: [
+      {
+        key: "nr1.surveys",
+        label: "Rodadas de diagnóstico",
+        description: "Cria e encerra rodadas anônimas de riscos psicossociais.",
+        actions: ["view", "edit"],
+      },
+      {
+        key: "nr1.results",
+        label: "Resultado e análise do líder",
+        description: "Fatores, tabulação, comparação entre ciclos e análise por fator.",
+        actions: ["view", "edit"],
+      },
+      {
+        key: "nr1.ai_analysis",
+        label: "Análise assistida por IA",
+        description: "Leitura agregada do resultado por modelo de linguagem.",
+        actions: ["view", "export"],
+      },
+      {
+        key: "nr1.actions",
+        label: "Riscos e ações",
+        description: "CRUD de riscos e ações, responsáveis, prazos e evidências.",
+        actions: ["view", "edit"],
+      },
+      {
+        key: "nr1.entry_modes",
+        label: "Modos de entrada",
+        description: "Inventário de riscos, plano de ação existente e conversa guiada.",
+        actions: ["view", "edit"],
+      },
+      {
+        key: "nr1.complaints",
+        label: "Canal seguro de denúncias",
+        description: "Denúncias anônimas e notificações aos leaders autorizados.",
+        actions: ["view", "export"],
+      },
+      {
+        key: "nr1.export",
+        label: "Exportação do resultado",
+        description: "Baixa do resultado agregado em CSV.",
+        actions: ["export"],
+      },
+    ],
+  },
 ];
 
 // Defaults por role — usados no bootstrap para semear templates.
 // true = ligado; ausente = false.
-type Role = "super_admin" | "neo_admin" | "franchise_owner" | "hr_admin" | "leader" | "collaborator";
+type Role =
+  "super_admin" | "neo_admin" | "franchise_owner" | "hr_admin" | "leader" | "collaborator";
 
-export const TEMPLATE_DEFAULTS: Record<Role, { name: string; description: string; enabled: Partial<Record<string, FeatureAction[]>> }> = {
+export const TEMPLATE_DEFAULTS: Record<
+  Role,
+  { name: string; description: string; enabled: Partial<Record<string, FeatureAction[]>> }
+> = {
   super_admin: {
     name: "Super Admin",
     description: "Acesso completo — visualiza, edita e exporta tudo.",
@@ -133,6 +185,13 @@ export const TEMPLATE_DEFAULTS: Record<Role, { name: string; description: string
       "consciencia.voice_agenda": ["view", "edit"],
       "consciencia.subordinate_send": ["view", "edit"],
       "consciencia.subordinate_map": ["view", "export"],
+      "nr1.surveys": ["view", "edit"],
+      "nr1.results": ["view", "edit"],
+      "nr1.ai_analysis": ["view", "export"],
+      "nr1.actions": ["view", "edit"],
+      "nr1.entry_modes": ["view", "edit"],
+      "nr1.complaints": ["view", "export"],
+      "nr1.export": ["export"],
     },
   },
   neo_admin: {
@@ -140,6 +199,11 @@ export const TEMPLATE_DEFAULTS: Record<Role, { name: string; description: string
     description: "Administração da plataforma — visão agregada.",
     enabled: {
       "consciencia.coverage": ["view", "export"],
+      "nr1.surveys": ["view"],
+      "nr1.results": ["view"],
+      "nr1.ai_analysis": ["view"],
+      "nr1.actions": ["view"],
+      "nr1.complaints": ["view", "export"],
     },
   },
   franchise_owner: {
@@ -158,6 +222,12 @@ export const TEMPLATE_DEFAULTS: Record<Role, { name: string; description: string
       "consciencia.voice_agenda": ["view", "edit"],
       "consciencia.subordinate_send": ["view", "edit"],
       "consciencia.subordinate_map": ["view"],
+      "nr1.surveys": ["view", "edit"],
+      "nr1.results": ["view", "edit"],
+      "nr1.ai_analysis": ["view"],
+      "nr1.actions": ["view", "edit"],
+      "nr1.entry_modes": ["view", "edit"],
+      "nr1.export": ["export"],
     },
   },
   hr_admin: {
@@ -166,6 +236,13 @@ export const TEMPLATE_DEFAULTS: Record<Role, { name: string; description: string
     enabled: {
       "consciencia.coverage": ["view", "export"],
       "consciencia.subordinate_map": ["view"],
+      "nr1.surveys": ["view", "edit"],
+      "nr1.results": ["view", "edit"],
+      "nr1.ai_analysis": ["view", "export"],
+      "nr1.actions": ["view", "edit"],
+      "nr1.entry_modes": ["view", "edit"],
+      "nr1.complaints": ["view", "export"],
+      "nr1.export": ["export"],
     },
   },
   leader: {
@@ -185,6 +262,12 @@ export const TEMPLATE_DEFAULTS: Record<Role, { name: string; description: string
       "consciencia.voice_agenda": ["view", "edit"],
       "consciencia.subordinate_send": ["view", "edit"],
       "consciencia.subordinate_map": ["view"],
+      "nr1.surveys": ["view", "edit"],
+      "nr1.results": ["view", "edit"],
+      "nr1.ai_analysis": ["view"],
+      "nr1.actions": ["view", "edit"],
+      "nr1.entry_modes": ["view", "edit"],
+      "nr1.export": ["export"],
     },
   },
   collaborator: {

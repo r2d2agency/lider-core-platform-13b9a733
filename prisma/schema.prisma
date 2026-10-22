@@ -1977,9 +1977,17 @@ model NR1Survey {
   token          String          @unique
   status         NR1SurveyStatus @default(open)
   actionPlan     String?         @map("action_plan")
+  // Análise de IA do resultado agregado (persistida para não se perder ao
+  // fechar o diálogo).
+  aiAnalysis     Json?           @map("ai_analysis")
+  // Se o novo ciclo deve ser comparado com a rodada anterior da mesma equipe.
+  comparePrevious Boolean        @default(true) @map("compare_previous")
   createdBy      String?         @map("created_by") @db.Uuid
   createdAt      DateTime        @default(now()) @map("created_at")
   closedAt       DateTime?       @map("closed_at")
+  // Regra transversal "nada é excluído": rodadas encerradas são arquivadas,
+  // nunca apagadas em cascata.
+  archivedAt     DateTime?       @map("archived_at")
 
   responses NR1Response[]
   factorAnalyses NR1FactorAnalysis[]
@@ -2030,6 +2038,7 @@ enum NR1ActionOrigin {
   existing_action_plan
   external_assessment
   leader_identification
+  guided_conversation
   other
 }
 
@@ -2055,6 +2064,12 @@ enum NR1ActionSufficiency {
   insufficient
   pending
 }
+// Nível de certeza do líder ao registrar a situação (Marco 02 — "Ainda não sei").
+enum NR1ActionKnowledge {
+  known
+  partial
+  unsure
+}
 
 // Registro operacional de situação/risco e medida da equipe (Marco 08).
 model NR1Action {
@@ -2078,6 +2093,11 @@ model NR1Action {
   sufficiencyNote   String?          @map("sufficiency_note")
   nextCheckAt       DateTime?        @map("next_check_at")
   cancelReason      String?          @map("cancel_reason")
+  // Nível de certeza do líder: known (reconhece a situação), partial (sabe
+  // parte), unsure (ainda não sei — precisa apurar).
+  knowledgeLevel    NR1ActionKnowledge @default(known) @map("knowledge_level")
+  // Referência ao documento de origem (inventário de riscos, plano de ação).
+  sourceRef         String?          @map("source_ref")
   evidence          Json             @default("[]")
   history           Json             @default("[]")
   agendaItemId      String?          @map("agenda_item_id") @db.Uuid

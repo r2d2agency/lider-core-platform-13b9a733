@@ -18,6 +18,7 @@ import {
 import { exportCsv } from "@/lib/csv-export";
 import { api } from "@/lib/api";
 import { useCurrentOrg } from "@/lib/use-current-org";
+import { Nr1IndicatorsCard, type Nr1Snapshot } from "@/components/nr1/Nr1IndicatorsCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -110,6 +111,15 @@ function IndicatorsPage() {
     enabled: !!orgId,
   });
 
+  // Indicadores do NR-1: o resultado do diagnóstico de riscos psicossociais
+  // entra no mesmo painel de indicadores, com meta, farol e histórico.
+  const nr1 = useQuery({
+    queryKey: ["nr1", "indicators", orgId],
+    queryFn: () => api<Nr1Snapshot>(`/organization/${orgId}/nr1/indicators`),
+    enabled: !!orgId,
+    retry: false,
+  });
+
   if (!orgId) {
     return (
       <div className="mx-auto max-w-3xl">
@@ -178,6 +188,13 @@ function IndicatorsPage() {
       </header>
 
       <ConcentrationCard data={concentration.data} />
+
+      <Nr1IndicatorsCard
+        orgId={orgId}
+        data={nr1.data}
+        isLoading={nr1.isLoading}
+        isError={nr1.isError}
+      />
 
       <div>
         <div className="mb-2">

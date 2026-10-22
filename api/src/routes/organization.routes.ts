@@ -25,7 +25,13 @@ organizationRouter.use(requireAuth);
 // ------------------------------------------------------------
 // Helpers
 // ------------------------------------------------------------
-async function audit(actorUserId: string | undefined, action: string, targetType?: string, targetId?: string, metadata?: Record<string, unknown>) {
+async function audit(
+  actorUserId: string | undefined,
+  action: string,
+  targetType?: string,
+  targetId?: string,
+  metadata?: Record<string, unknown>,
+) {
   try {
     await prisma.auditLog.create({
       data: {
@@ -109,9 +115,14 @@ organizationRouter.get("/:orgId/map", async (req, res) => {
   const membersByTeam = new Map<string, typeof memberships>();
   const membersByArea = new Map<string, typeof memberships>();
   const membersByBranch = new Map<string, typeof memberships>();
-  const pushInto = (map: Map<string, typeof memberships>, key: string, item: (typeof memberships)[number]) => {
+  const pushInto = (
+    map: Map<string, typeof memberships>,
+    key: string,
+    item: (typeof memberships)[number],
+  ) => {
     const arr = map.get(key);
-    if (arr) arr.push(item); else map.set(key, [item]);
+    if (arr) arr.push(item);
+    else map.set(key, [item]);
   };
   for (const m of memberships) {
     if (m.teamId) pushInto(membersByTeam, m.teamId, m);
@@ -139,15 +150,17 @@ organizationRouter.get("/:orgId/map", async (req, res) => {
     kpis: a.kpis,
     managerUserId: a.managerUserId,
     peopleCount: membersByArea.get(a.id)?.length ?? 0,
-    teams: teams.filter((t) => t.areaId === a.id).map((t) => ({
-      id: t.id,
-      name: t.name,
-      objectives: t.objectives,
-      mission: t.mission,
-      leaderMembershipId: t.leaderMembershipId,
-      peopleCount: membersByTeam.get(t.id)?.length ?? 0,
-      members: (membersByTeam.get(t.id) ?? []).map(mapMember),
-    })),
+    teams: teams
+      .filter((t) => t.areaId === a.id)
+      .map((t) => ({
+        id: t.id,
+        name: t.name,
+        objectives: t.objectives,
+        mission: t.mission,
+        leaderMembershipId: t.leaderMembershipId,
+        peopleCount: membersByTeam.get(t.id)?.length ?? 0,
+        members: (membersByTeam.get(t.id) ?? []).map(mapMember),
+      })),
   }));
 
   const branchesTree = branches.map((b) => ({
@@ -215,7 +228,13 @@ function normalizeImportRows(rows: Record<string, string>[]) {
     const roleTitle = pick(r, ["cargo", "role", "posicao", "posição", "funcao", "função"]);
     const whatsapp = pick(r, ["whatsapp", "celular", "telefone", "phone"]);
     const levelRaw = pick(r, ["nivel", "nível", "tipo", "level"]).toLowerCase();
-    const leaderEmail = pick(r, ["lider_email", "líder_email", "email_lider", "gestor_email", "lider"]).toLowerCase();
+    const leaderEmail = pick(r, [
+      "lider_email",
+      "líder_email",
+      "email_lider",
+      "gestor_email",
+      "lider",
+    ]).toLowerCase();
     if (!name && !email && !area && !team) return;
     if (!area) {
       errors.push(`Linha ${i + 2}: coluna "area" é obrigatória.`);
@@ -256,7 +275,8 @@ organizationRouter.post("/:orgId/map/import/parse-file", async (req, res) => {
   try {
     const { filename, mimeType, base64 } = parseFileSchema.parse(req.body);
     const raw = await extractDocumentText({ filename, mimeType, base64 });
-    if (!raw.trim()) return res.status(422).json({ error: "Não foi possível ler o conteúdo do arquivo." });
+    if (!raw.trim())
+      return res.status(422).json({ error: "Não foi possível ler o conteúdo do arquivo." });
 
     const csv = await completeChat({
       temperature: 0,
@@ -280,14 +300,15 @@ organizationRouter.post("/:orgId/map/import/parse-file", async (req, res) => {
       .replace(/```\s*$/i, "")
       .trim();
     if (!/filial|area/i.test(clean.split(/\r?\n/)[0] ?? "")) {
-      return res.status(422).json({ error: "A IA não conseguiu montar o organograma a partir deste arquivo." });
+      return res
+        .status(422)
+        .json({ error: "A IA não conseguiu montar o organograma a partir deste arquivo." });
     }
     res.json({ csv: clean });
   } catch (err) {
     return badReq(res, err);
   }
 });
-
 
 const importBodySchema = z.object({ csv: z.string().min(1), dryRun: z.boolean().default(false) });
 
@@ -304,7 +325,9 @@ organizationRouter.post("/:orgId/map/import", async (req, res) => {
 
     const branchNames = Array.from(new Set(rows.map((r) => r.branch).filter(Boolean)));
     const areaKeys = Array.from(new Set(rows.map((r) => `${r.branch}|||${r.area}`)));
-    const teamKeys = Array.from(new Set(rows.filter((r) => r.team).map((r) => `${r.branch}|||${r.area}|||${r.team}`)));
+    const teamKeys = Array.from(
+      new Set(rows.filter((r) => r.team).map((r) => `${r.branch}|||${r.area}|||${r.team}`)),
+    );
     const roleTitles = Array.from(new Set(rows.map((r) => r.roleTitle).filter(Boolean)));
     const people = rows.filter((r) => r.name && r.email);
 
@@ -333,10 +356,15 @@ organizationRouter.post("/:orgId/map/import", async (req, res) => {
     const areaByKey = new Map<string, string>();
     for (const key of areaKeys) {
       const [branchName, areaName] = key.split("|||");
-      const branchId = branchName ? branchByName.get(branchName) ?? null : null;
-      const existing = await prisma.area.findFirst({ where: { organizationId: orgId, name: areaName } });
+      const branchId = branchName ? (branchByName.get(branchName) ?? null) : null;
+      const existing = await prisma.area.findFirst({
+        where: { organizationId: orgId, name: areaName },
+      });
       const a = existing
-        ? await prisma.area.update({ where: { id: existing.id }, data: { branchId: existing.branchId ?? branchId } })
+        ? await prisma.area.update({
+            where: { id: existing.id },
+            data: { branchId: existing.branchId ?? branchId },
+          })
         : await prisma.area.create({ data: { organizationId: orgId, name: areaName, branchId } });
       areaByKey.set(key, a.id);
     }
@@ -346,8 +374,12 @@ organizationRouter.post("/:orgId/map/import", async (req, res) => {
     for (const key of teamKeys) {
       const [branchName, areaName, teamName] = key.split("|||");
       const areaId = areaByKey.get(`${branchName}|||${areaName}`)!;
-      const existing = await prisma.team.findFirst({ where: { organizationId: orgId, areaId, name: teamName } });
-      const t = existing ?? (await prisma.team.create({ data: { organizationId: orgId, areaId, name: teamName } }));
+      const existing = await prisma.team.findFirst({
+        where: { organizationId: orgId, areaId, name: teamName },
+      });
+      const t =
+        existing ??
+        (await prisma.team.create({ data: { organizationId: orgId, areaId, name: teamName } }));
       teamByKey.set(key, t.id);
     }
 
@@ -357,22 +389,36 @@ organizationRouter.post("/:orgId/map/import", async (req, res) => {
       const existing = await prisma.orgRole.findFirst({ where: { organizationId: orgId, title } });
       const isLeader = rows.some((r) => r.roleTitle === title && r.level === "leader");
       const role = existing
-        ? await prisma.orgRole.update({ where: { id: existing.id }, data: { isLeader: existing.isLeader || isLeader } })
-        : await prisma.orgRole.create({ data: { organizationId: orgId, title, isLeader, createdBy: req.userId! } });
+        ? await prisma.orgRole.update({
+            where: { id: existing.id },
+            data: { isLeader: existing.isLeader || isLeader },
+          })
+        : await prisma.orgRole.create({
+            data: { organizationId: orgId, title, isLeader, createdBy: req.userId! },
+          });
       roleByTitle.set(title, role.id);
     }
 
     // --- Pessoas (User + Profile + Membership + cargo)
     const membershipByEmail = new Map<string, string>();
     for (const p of people) {
-      let user = await prisma.user.findUnique({ where: { email: p.email }, include: { profile: true } });
+      let user = await prisma.user.findUnique({
+        where: { email: p.email },
+        include: { profile: true },
+      });
       if (!user) {
         const tempPass = Math.random().toString(36).slice(2) + "A9!";
         user = await prisma.user.create({
           data: {
             email: p.email,
             passwordHash: await bcrypt.hash(tempPass, 10),
-            profile: { create: { fullName: p.name, whatsapp: p.whatsapp || null, jobTitle: p.roleTitle || null } },
+            profile: {
+              create: {
+                fullName: p.name,
+                whatsapp: p.whatsapp || null,
+                jobTitle: p.roleTitle || null,
+              },
+            },
           },
           include: { profile: true },
         });
@@ -384,17 +430,27 @@ organizationRouter.post("/:orgId/map/import", async (req, res) => {
             whatsapp: p.whatsapp || user.profile?.whatsapp || null,
             jobTitle: p.roleTitle || user.profile?.jobTitle || null,
           },
-          create: { id: user.id, fullName: p.name, whatsapp: p.whatsapp || null, jobTitle: p.roleTitle || null },
+          create: {
+            id: user.id,
+            fullName: p.name,
+            whatsapp: p.whatsapp || null,
+            jobTitle: p.roleTitle || null,
+          },
         });
       }
 
       const areaId = areaByKey.get(`${p.branch}|||${p.area}`) ?? null;
-      const teamId = p.team ? teamByKey.get(`${p.branch}|||${p.area}|||${p.team}`) ?? null : null;
-      const branchId = p.branch ? branchByName.get(p.branch) ?? null : null;
+      const teamId = p.team ? (teamByKey.get(`${p.branch}|||${p.area}|||${p.team}`) ?? null) : null;
+      const branchId = p.branch ? (branchByName.get(p.branch) ?? null) : null;
 
       const membership = await prisma.membership.upsert({
         where: { userId_organizationId: { userId: user.id, organizationId: orgId } },
-        update: { areaId, teamId, branchId, role: p.level === "leader" ? "leader" : "collaborator" },
+        update: {
+          areaId,
+          teamId,
+          branchId,
+          role: p.level === "leader" ? "leader" : "collaborator",
+        },
         create: {
           userId: user.id,
           organizationId: orgId,
@@ -419,13 +475,19 @@ organizationRouter.post("/:orgId/map/import", async (req, res) => {
 
       const roleId = p.roleTitle ? roleByTitle.get(p.roleTitle) : null;
       if (roleId) {
-        const exists = await prisma.roleAssignment.findFirst({ where: { roleId, membershipId: membership.id } });
-        if (!exists) await prisma.roleAssignment.create({ data: { roleId, membershipId: membership.id } });
+        const exists = await prisma.roleAssignment.findFirst({
+          where: { roleId, membershipId: membership.id },
+        });
+        if (!exists)
+          await prisma.roleAssignment.create({ data: { roleId, membershipId: membership.id } });
       }
 
       // Líder da equipe
       if (p.level === "leader" && teamId) {
-        await prisma.team.update({ where: { id: teamId }, data: { leaderMembershipId: membership.id } });
+        await prisma.team.update({
+          where: { id: teamId },
+          data: { leaderMembershipId: membership.id },
+        });
       }
     }
 
@@ -436,7 +498,9 @@ organizationRouter.post("/:orgId/map/import", async (req, res) => {
       const membershipId = membershipByEmail.get(p.email);
       const leaderMembershipId = membershipByEmail.get(p.leaderEmail);
       if (!membershipId || !leaderMembershipId) continue;
-      const leaderMembership = await prisma.membership.findUnique({ where: { id: leaderMembershipId } });
+      const leaderMembership = await prisma.membership.findUnique({
+        where: { id: leaderMembershipId },
+      });
       if (!leaderMembership) continue;
       await prisma.membership.update({
         where: { id: membershipId },
@@ -456,7 +520,6 @@ organizationRouter.post("/:orgId/map/import", async (req, res) => {
     return badReq(res, err);
   }
 });
-
 
 // ============================================================
 // 2. AREAS — extensão (mission, objective, kpis, contextMd)
@@ -483,7 +546,9 @@ organizationRouter.patch("/:orgId/areas/:id", async (req, res) => {
     });
     await audit(req.userId, "area.update", "area", a.id, data);
     res.json(a);
-  } catch (err) { badReq(res, err); }
+  } catch (err) {
+    badReq(res, err);
+  }
 });
 
 organizationRouter.get("/:orgId/areas/:id", async (req, res) => {
@@ -497,6 +562,16 @@ organizationRouter.get("/:orgId/areas/:id", async (req, res) => {
   });
   if (!area) return res.status(404).json({ error: "Área não encontrada" });
   res.json(area);
+});
+
+/** Lista simples de equipes da organização — usada em seletores (NR-1, planos). */
+organizationRouter.get("/:orgId/teams", async (req, res) => {
+  const teams = await prisma.team.findMany({
+    where: { organizationId: req.params.orgId },
+    select: { id: true, name: true, areaId: true },
+    orderBy: { name: "asc" },
+  });
+  res.json(teams);
 });
 
 // ============================================================
@@ -516,10 +591,15 @@ organizationRouter.patch("/:orgId/teams/:id", async (req, res) => {
     const data = teamExtSchema.parse(req.body);
     const existing = await findTeamInOrg(req.params.orgId, req.params.id);
     if (!existing) return res.status(404).json({ error: "Time não encontrado" });
-    const t = await prisma.team.update({ where: { id: req.params.id }, data: { ...data, updatedAt: new Date() } });
+    const t = await prisma.team.update({
+      where: { id: req.params.id },
+      data: { ...data, updatedAt: new Date() },
+    });
     await audit(req.userId, "team.update", "team", t.id, data);
     res.json(t);
-  } catch (err) { badReq(res, err); }
+  } catch (err) {
+    badReq(res, err);
+  }
 });
 
 // ============================================================
@@ -552,11 +632,18 @@ organizationRouter.post("/:orgId/roles", async (req, res) => {
   try {
     const data = roleSchema.parse(req.body);
     const r = await prisma.orgRole.create({
-      data: { ...data, organizationId: req.params.orgId, createdBy: req.userId, updatedBy: req.userId },
+      data: {
+        ...data,
+        organizationId: req.params.orgId,
+        createdBy: req.userId,
+        updatedBy: req.userId,
+      },
     });
     await audit(req.userId, "role.create", "role", r.id);
     res.status(201).json(r);
-  } catch (err) { badReq(res, err); }
+  } catch (err) {
+    badReq(res, err);
+  }
 });
 
 organizationRouter.patch("/:orgId/roles/:id", async (req, res) => {
@@ -568,7 +655,9 @@ organizationRouter.patch("/:orgId/roles/:id", async (req, res) => {
     });
     await audit(req.userId, "role.update", "role", r.id, data);
     res.json(r);
-  } catch (err) { badReq(res, err); }
+  } catch (err) {
+    badReq(res, err);
+  }
 });
 
 organizationRouter.delete("/:orgId/roles/:id", async (req, res) => {
@@ -584,7 +673,21 @@ organizationRouter.delete("/:orgId/roles/:id", async (req, res) => {
 // ============================================================
 const ritualSchema = z.object({
   name: z.string().min(1),
-  type: z.enum(["daily", "weekly", "one_on_one", "feedback", "action_plan", "indicators", "strategic", "day_one", "checkpoint", "retro", "custom"]).default("custom"),
+  type: z
+    .enum([
+      "daily",
+      "weekly",
+      "one_on_one",
+      "feedback",
+      "action_plan",
+      "indicators",
+      "strategic",
+      "day_one",
+      "checkpoint",
+      "retro",
+      "custom",
+    ])
+    .default("custom"),
   scope: z.enum(["org", "branch", "area", "team"]).default("team"),
   scopeId: z.string().uuid().optional().nullable(),
   objective: z.string().optional().nullable(),
@@ -623,7 +726,9 @@ organizationRouter.get("/:orgId/rituals/:id", async (req, res) => {
   const r = await prisma.ritual.findFirst({
     where: { id: req.params.id, organizationId: req.params.orgId },
     include: {
-      participants: { include: { membership: { include: { user: { include: { profile: true } } } } } },
+      participants: {
+        include: { membership: { include: { user: { include: { profile: true } } } } },
+      },
       occurrences: { orderBy: { scheduledAt: "desc" }, take: 20 },
     },
   });
@@ -651,7 +756,9 @@ organizationRouter.post("/:orgId/rituals", async (req, res) => {
     }
     await audit(req.userId, "ritual.create", "ritual", r.id);
     res.status(201).json(r);
-  } catch (err) { badReq(res, err); }
+  } catch (err) {
+    badReq(res, err);
+  }
 });
 
 organizationRouter.patch("/:orgId/rituals/:id", async (req, res) => {
@@ -678,7 +785,9 @@ organizationRouter.patch("/:orgId/rituals/:id", async (req, res) => {
     }
     await audit(req.userId, "ritual.update", "ritual", r.id);
     res.json(r);
-  } catch (err) { badReq(res, err); }
+  } catch (err) {
+    badReq(res, err);
+  }
 });
 
 organizationRouter.delete("/:orgId/rituals/:id", async (req, res) => {
@@ -709,21 +818,33 @@ organizationRouter.post("/:orgId/rituals/:id/occurrences", async (req, res) => {
     });
     await audit(req.userId, "occurrence.create", "ritual_occurrence", o.id);
     res.status(201).json(o);
-  } catch (err) { badReq(res, err); }
+  } catch (err) {
+    badReq(res, err);
+  }
 });
 
 organizationRouter.patch("/:orgId/occurrences/:id", async (req, res) => {
   try {
     const existing = await findOccurrenceInOrg(req.params.orgId, req.params.id);
     if (!existing) return res.status(404).json({ error: "Ocorrência não encontrada" });
-    const body = z.object({
-      status: z.enum(["scheduled", "in_progress", "done", "missed", "canceled"]).optional(),
-      startedAt: z.string().datetime().optional(),
-      endedAt: z.string().datetime().optional(),
-      minutes: z.string().optional(),
-      notes: z.string().optional(),
-      pendings: z.array(z.object({ text: z.string(), owner: z.string().optional(), due: z.string().optional() })).optional(),
-    }).parse(req.body);
+    const body = z
+      .object({
+        status: z.enum(["scheduled", "in_progress", "done", "missed", "canceled"]).optional(),
+        startedAt: z.string().datetime().optional(),
+        endedAt: z.string().datetime().optional(),
+        minutes: z.string().optional(),
+        notes: z.string().optional(),
+        pendings: z
+          .array(
+            z.object({
+              text: z.string(),
+              owner: z.string().optional(),
+              due: z.string().optional(),
+            }),
+          )
+          .optional(),
+      })
+      .parse(req.body);
     const o = await prisma.ritualOccurrence.update({
       where: { id: req.params.id },
       data: {
@@ -735,7 +856,9 @@ organizationRouter.patch("/:orgId/occurrences/:id", async (req, res) => {
     });
     await audit(req.userId, "occurrence.update", "ritual_occurrence", o.id, body);
     res.json(o);
-  } catch (err) { badReq(res, err); }
+  } catch (err) {
+    badReq(res, err);
+  }
 });
 
 // ============================================================
@@ -788,12 +911,15 @@ organizationRouter.post("/:orgId/delegations", async (req, res) => {
         userId: d.assigneeId,
         organizationId: d.organizationId,
         title: "Nova delegação para você",
-        body: d.title + (d.dueAt ? ` — prazo ${new Date(d.dueAt).toLocaleDateString("pt-BR")}` : ""),
+        body:
+          d.title + (d.dueAt ? ` — prazo ${new Date(d.dueAt).toLocaleDateString("pt-BR")}` : ""),
         linkUrl: "/app/organization/delegations",
       }).catch(() => null);
     }
     res.status(201).json(d);
-  } catch (err) { badReq(res, err); }
+  } catch (err) {
+    badReq(res, err);
+  }
 });
 
 organizationRouter.patch("/:orgId/delegations/:id", async (req, res) => {
@@ -828,7 +954,9 @@ organizationRouter.patch("/:orgId/delegations/:id", async (req, res) => {
       }).catch(() => null);
     }
     res.json(d);
-  } catch (err) { badReq(res, err); }
+  } catch (err) {
+    badReq(res, err);
+  }
 });
 
 organizationRouter.delete("/:orgId/delegations/:id", async (req, res) => {
@@ -848,7 +976,9 @@ organizationRouter.post("/:orgId/delegations/:id/comments", async (req, res) => 
       data: { delegationId: req.params.id, authorId: req.userId, body },
     });
     res.status(201).json(c);
-  } catch (err) { badReq(res, err); }
+  } catch (err) {
+    badReq(res, err);
+  }
 });
 
 // -- Follow-up ativo (Etapa 3) --------------------------------
@@ -860,10 +990,7 @@ organizationRouter.get("/:orgId/delegations/follow-up", async (req, res) => {
     where: {
       organizationId: req.params.orgId,
       status: { in: ["open", "in_progress", "blocked"] },
-      OR: [
-        { dueAt: { lt: now } },
-        { updatedAt: { lt: staleSince } },
-      ],
+      OR: [{ dueAt: { lt: now } }, { updatedAt: { lt: staleSince } }],
     },
     orderBy: [{ dueAt: "asc" }, { updatedAt: "asc" }],
     take: 50,
@@ -880,9 +1007,10 @@ organizationRouter.get("/:orgId/delegations/follow-up", async (req, res) => {
       assigneeId: d.assigneeId,
       overdueDays: overdueDays != null && overdueDays > 0 ? overdueDays : null,
       staleDays,
-      reason: overdueDays != null && overdueDays > 0
-        ? `Atrasada há ${overdueDays} dia(s)`
-        : `Sem movimento há ${staleDays} dia(s)`,
+      reason:
+        overdueDays != null && overdueDays > 0
+          ? `Atrasada há ${overdueDays} dia(s)`
+          : `Sem movimento há ${staleDays} dia(s)`,
     };
   });
   res.json(enriched);
@@ -896,7 +1024,12 @@ organizationRouter.post("/:orgId/delegations/:id/nudge", async (req, res) => {
     if (!d) return res.status(404).json({ error: "Não encontrada" });
     if (!d.assigneeId) return res.status(400).json({ error: "Delegação sem responsável" });
     const hist = Array.isArray(d.history) ? (d.history as unknown[]) : [];
-    hist.push({ at: new Date().toISOString(), by: req.userId, action: "nudge", message: message ?? null });
+    hist.push({
+      at: new Date().toISOString(),
+      by: req.userId,
+      action: "nudge",
+      message: message ?? null,
+    });
     await prisma.delegation.update({
       where: { id: d.id },
       data: { history: hist as never, updatedBy: req.userId },
@@ -905,12 +1038,16 @@ organizationRouter.post("/:orgId/delegations/:id/nudge", async (req, res) => {
       userId: d.assigneeId,
       organizationId: d.organizationId,
       title: "Cobrança sobre delegação",
-      body: message?.trim() || `Lembrete: "${d.title}"${d.dueAt ? ` — prazo ${new Date(d.dueAt).toLocaleDateString("pt-BR")}` : ""}`,
+      body:
+        message?.trim() ||
+        `Lembrete: "${d.title}"${d.dueAt ? ` — prazo ${new Date(d.dueAt).toLocaleDateString("pt-BR")}` : ""}`,
       linkUrl: "/app/organization/delegations",
     }).catch(() => null);
     await audit(req.userId, "delegation.nudge", "delegation", d.id, { message });
     res.json({ ok: true });
-  } catch (err) { badReq(res, err); }
+  } catch (err) {
+    badReq(res, err);
+  }
 });
 
 // Check-in rápido de ocorrência (1 clique: feita ou perdida)
@@ -918,10 +1055,12 @@ organizationRouter.post("/:orgId/occurrences/:id/quick-checkin", async (req, res
   try {
     const existing = await findOccurrenceInOrg(req.params.orgId, req.params.id);
     if (!existing) return res.status(404).json({ error: "Ocorrência não encontrada" });
-    const { status, note } = z.object({
-      status: z.enum(["done", "missed"]),
-      note: z.string().optional(),
-    }).parse(req.body);
+    const { status, note } = z
+      .object({
+        status: z.enum(["done", "missed"]),
+        note: z.string().optional(),
+      })
+      .parse(req.body);
     const o = await prisma.ritualOccurrence.update({
       where: { id: req.params.id },
       data: {
@@ -932,7 +1071,9 @@ organizationRouter.post("/:orgId/occurrences/:id/quick-checkin", async (req, res
     });
     await audit(req.userId, "occurrence.quick_checkin", "ritual_occurrence", o.id, { status });
     res.json(o);
-  } catch (err) { badReq(res, err); }
+  } catch (err) {
+    badReq(res, err);
+  }
 });
 
 // Ocorrências de hoje/próximas 24h para o usuário logado (owner ou participante)
@@ -940,16 +1081,23 @@ organizationRouter.get("/:orgId/occurrences/today", async (req, res) => {
   const orgId = req.params.orgId;
   const userId = req.userId!;
   const now = new Date();
-  const start = new Date(now); start.setHours(0, 0, 0, 0);
-  const end = new Date(now); end.setHours(23, 59, 59, 999);
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(now);
+  end.setHours(23, 59, 59, 999);
   const [owned, parts] = await Promise.all([
-    prisma.ritual.findMany({ where: { organizationId: orgId, ownerId: userId }, select: { id: true } }),
+    prisma.ritual.findMany({
+      where: { organizationId: orgId, ownerId: userId },
+      select: { id: true },
+    }),
     prisma.ritualParticipant.findMany({
       where: { membership: { organizationId: orgId, userId } },
       select: { ritualId: true },
     }),
   ]);
-  const ritualIds = Array.from(new Set([...owned.map((r) => r.id), ...parts.map((p) => p.ritualId)]));
+  const ritualIds = Array.from(
+    new Set([...owned.map((r) => r.id), ...parts.map((p) => p.ritualId)]),
+  );
   if (!ritualIds.length) return res.json([]);
   const items = await prisma.ritualOccurrence.findMany({
     where: {
@@ -1000,7 +1148,9 @@ organizationRouter.post("/:orgId/decisions", async (req, res) => {
     });
     await audit(req.userId, "decision.create", "decision", d.id);
     res.status(201).json(d);
-  } catch (err) { badReq(res, err); }
+  } catch (err) {
+    badReq(res, err);
+  }
 });
 
 organizationRouter.patch("/:orgId/decisions/:id", async (req, res) => {
@@ -1021,7 +1171,9 @@ organizationRouter.patch("/:orgId/decisions/:id", async (req, res) => {
     });
     await audit(req.userId, "decision.update", "decision", d.id, data);
     res.json(d);
-  } catch (err) { badReq(res, err); }
+  } catch (err) {
+    badReq(res, err);
+  }
 });
 
 organizationRouter.delete("/:orgId/decisions/:id", async (req, res) => {
@@ -1037,7 +1189,9 @@ organizationRouter.delete("/:orgId/decisions/:id", async (req, res) => {
 // ============================================================
 const docSchema = z.object({
   title: z.string().min(1),
-  kind: z.enum(["policy", "procedure", "flow", "material", "video", "pdf", "link", "other"]).default("other"),
+  kind: z
+    .enum(["policy", "procedure", "flow", "material", "video", "pdf", "link", "other"])
+    .default("other"),
   url: z.string().url().optional().nullable(),
   mime: z.string().optional().nullable(),
   size: z.number().int().optional().nullable(),
@@ -1069,7 +1223,9 @@ organizationRouter.post("/:orgId/documents", async (req, res) => {
     });
     await audit(req.userId, "document.create", "document", d.id);
     res.status(201).json(d);
-  } catch (err) { badReq(res, err); }
+  } catch (err) {
+    badReq(res, err);
+  }
 });
 
 organizationRouter.delete("/:orgId/documents/:id", async (req, res) => {
@@ -1199,14 +1355,20 @@ organizationRouter.get("/:orgId/health-score", async (req, res) => {
   // Delegações (20%)
   const now = Date.now();
   const overdue = delegations.filter((d) => d.dueAt && d.dueAt.getTime() < now).length;
-  const scoreDeleg = delegations.length ? 1 - overdue / delegations.length : allDelegations > 0 ? 0.7 : 0;
+  const scoreDeleg = delegations.length
+    ? 1 - overdue / delegations.length
+    : allDelegations > 0
+      ? 0.7
+      : 0;
 
   // Indicadores (15%) — placeholder até integração
   const scoreKpis = areas.filter((a) => a.kpis.length).length / Math.max(1, areas.length);
 
   // Atualização (10%)
   const days = (dt: Date) => (Date.now() - dt.getTime()) / (24 * 60 * 60 * 1000);
-  const avgDays = [...areas, ...teams].reduce((s, e) => s + days(e.updatedAt), 0) / Math.max(1, areas.length + teams.length);
+  const avgDays =
+    [...areas, ...teams].reduce((s, e) => s + days(e.updatedAt), 0) /
+    Math.max(1, areas.length + teams.length);
   const scoreUpd = Math.max(0, 1 - avgDays / 30);
 
   // Pendências (15%) — proxy: 1 - overdue/planned
@@ -1226,7 +1388,9 @@ organizationRouter.get("/:orgId/health-score", async (req, res) => {
   res.json({ score, breakdown, computedAt: new Date() });
 });
 
-function round2(n: number) { return Math.round(n * 100) / 100; }
+function round2(n: number) {
+  return Math.round(n * 100) / 100;
+}
 
 // ============================================================
 // 11. DASHBOARD — resumo consolidado
@@ -1333,21 +1497,65 @@ organizationRouter.get("/:orgId/leadership-room", async (req, res) => {
       take: 10,
     }),
     prisma.ritual.count({ where: { organizationId: orgId, status: "active" } }),
-    prisma.area.findMany({ where: { organizationId: orgId }, select: { id: true, name: true, updatedAt: true, mission: true, kpis: true, managerUserId: true } }),
-    prisma.team.findMany({ where: { organizationId: orgId }, select: { id: true, name: true, updatedAt: true, mission: true, kpis: true, leaderMembershipId: true } }),
+    prisma.area.findMany({
+      where: { organizationId: orgId },
+      select: {
+        id: true,
+        name: true,
+        updatedAt: true,
+        mission: true,
+        kpis: true,
+        managerUserId: true,
+      },
+    }),
+    prisma.team.findMany({
+      where: { organizationId: orgId },
+      select: {
+        id: true,
+        name: true,
+        updatedAt: true,
+        mission: true,
+        kpis: true,
+        leaderMembershipId: true,
+      },
+    }),
   ]);
 
   // Pessoas que precisam de atenção — heurísticas
-  const attention = memberships.slice(0, 30).map((m) => {
-    const daysSinceUpdate = Math.floor((now.getTime() - (m.user.updatedAt?.getTime() ?? now.getTime())) / 86400000);
-    const name = m.user.profile?.fullName || m.user.email;
-    const signals: Array<{ kind: string; reason: string; severity: "high" | "medium" | "low"; action: string }> = [];
-    if (daysSinceUpdate > 30) signals.push({ kind: "one_on_one", reason: `Sem 1:1 há ${daysSinceUpdate} dias`, severity: daysSinceUpdate > 45 ? "high" : "medium", action: "Agendar 1:1" });
-    return { userId: m.userId, membershipId: m.id, name, avatarUrl: m.user.profile?.avatarUrl ?? null, signals };
-  }).filter((p) => p.signals.length > 0).sort((a, b) => {
-    const rank = { high: 0, medium: 1, low: 2 } as const;
-    return rank[a.signals[0].severity] - rank[b.signals[0].severity];
-  }).slice(0, 8);
+  const attention = memberships
+    .slice(0, 30)
+    .map((m) => {
+      const daysSinceUpdate = Math.floor(
+        (now.getTime() - (m.user.updatedAt?.getTime() ?? now.getTime())) / 86400000,
+      );
+      const name = m.user.profile?.fullName || m.user.email;
+      const signals: Array<{
+        kind: string;
+        reason: string;
+        severity: "high" | "medium" | "low";
+        action: string;
+      }> = [];
+      if (daysSinceUpdate > 30)
+        signals.push({
+          kind: "one_on_one",
+          reason: `Sem 1:1 há ${daysSinceUpdate} dias`,
+          severity: daysSinceUpdate > 45 ? "high" : "medium",
+          action: "Agendar 1:1",
+        });
+      return {
+        userId: m.userId,
+        membershipId: m.id,
+        name,
+        avatarUrl: m.user.profile?.avatarUrl ?? null,
+        signals,
+      };
+    })
+    .filter((p) => p.signals.length > 0)
+    .sort((a, b) => {
+      const rank = { high: 0, medium: 1, low: 2 } as const;
+      return rank[a.signals[0].severity] - rank[b.signals[0].severity];
+    })
+    .slice(0, 8);
 
   // Delegações
   const overdue = delegations.filter((d) => d.dueAt && d.dueAt < now);
@@ -1363,7 +1571,8 @@ organizationRouter.get("/:orgId/leadership-room", async (req, res) => {
   const openDecisions = decisions.filter((d) => d.status === "open" || d.status === "in_progress");
 
   // Próxima melhor ação
-  let nextBestAction: { title: string; description: string; cta: string; href: string } | null = null;
+  let nextBestAction: { title: string; description: string; cta: string; href: string } | null =
+    null;
   if (overdue[0]) {
     nextBestAction = {
       title: "Retome a delegação atrasada",
@@ -1400,12 +1609,30 @@ organizationRouter.get("/:orgId/leadership-room", async (req, res) => {
     upcomingOccurrences,
     rituals: { active: ritualsActive, done, missed, planned, adherence },
     delegations: {
-      overdue: overdue.slice(0, 6).map((d) => ({ id: d.id, title: d.title, dueAt: d.dueAt, priority: d.priority, status: d.status })),
-      upcoming: upcomingDeleg.map((d) => ({ id: d.id, title: d.title, dueAt: d.dueAt, priority: d.priority, status: d.status })),
+      overdue: overdue.slice(0, 6).map((d) => ({
+        id: d.id,
+        title: d.title,
+        dueAt: d.dueAt,
+        priority: d.priority,
+        status: d.status,
+      })),
+      upcoming: upcomingDeleg.map((d) => ({
+        id: d.id,
+        title: d.title,
+        dueAt: d.dueAt,
+        priority: d.priority,
+        status: d.status,
+      })),
       overdueCount: overdue.length,
     },
     decisions: {
-      recent: decisions.slice(0, 5).map((d) => ({ id: d.id, title: d.title, status: d.status, dueAt: d.dueAt, updatedAt: d.updatedAt })),
+      recent: decisions.slice(0, 5).map((d) => ({
+        id: d.id,
+        title: d.title,
+        status: d.status,
+        dueAt: d.dueAt,
+        updatedAt: d.updatedAt,
+      })),
       openCount: openDecisions.length,
     },
     structure: {

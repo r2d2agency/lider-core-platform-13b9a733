@@ -57,6 +57,10 @@ type NR1SurveySummary = {
   actionPlan: string | null;
   createdAt: string;
 };
+type NR1ActionSummary = {
+  id: string;
+  status: "not_started" | "in_progress" | "completed" | "overdue" | "cancelled";
+};
 
 function OrganizationDashboard() {
   const { orgId } = useCurrentOrg();
@@ -77,6 +81,14 @@ function OrganizationDashboard() {
     queryFn: () => api<NR1SurveySummary[]>(`/organization/${orgId}/nr1/surveys`),
     enabled: !!orgId,
   });
+  // O plano de ação do NR-1 vive em `NR1Action` (estruturado), não no
+  // campo de texto legado da rodada. Contar pelo texto dava um número
+  // desconectado do que o líder realmente precisa executar.
+  const nr1Actions = useQuery({
+    queryKey: ["nr1", "actions", orgId],
+    queryFn: () => api<NR1ActionSummary[]>(`/organization/${orgId}/nr1/actions`),
+    enabled: !!orgId,
+  });
 
   const weekRange = useMemo(() => formatWeekRange(new Date()), []);
 
@@ -85,8 +97,8 @@ function OrganizationDashboard() {
   const d = dash.data;
   const score = health.data?.score;
   const latestNR1 = nr1.data?.[0];
-  const pendingNR1Plans = (nr1.data ?? []).filter(
-    (survey) => survey.responseCount >= 3 && !survey.actionPlan,
+  const pendingNR1Plans = (nr1Actions.data ?? []).filter(
+    (action) => action.status !== "completed" && action.status !== "cancelled",
   ).length;
 
   return (
@@ -228,7 +240,7 @@ function OrganizationDashboard() {
                 </span>
                 <span className="rounded-full border border-border bg-background/80 px-3 py-1.5">
                   {pendingNR1Plans > 0
-                    ? `${pendingNR1Plans} plano(s) pendente(s)`
+                    ? `${pendingNR1Plans} ação(ões) em aberto`
                     : latestNR1.actionPlan
                       ? "Plano registrado"
                       : "Coleta em andamento"}

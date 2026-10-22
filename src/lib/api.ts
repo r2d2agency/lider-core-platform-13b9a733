@@ -79,11 +79,11 @@ export async function api<T = unknown>(path: string, opts: Options = {}): Promis
   return data as T;
 }
 
-export async function uploadFile(
+export async function uploadFile<T = unknown>(
   path: string,
   file: File,
   fieldName = "file",
-): Promise<{ url: string; path: string; filename: string; size: number; mimeType: string }> {
+): Promise<T> {
   if (!API_URL) {
     throw new ApiError("VITE_API_URL não configurada.", 0, null);
   }
@@ -106,7 +106,7 @@ export async function uploadFile(
           : "Upload failed") || "Upload failed";
     throw new ApiError(msg, res.status, data);
   }
-  return data as { url: string; path: string; filename: string; size: number; mimeType: string };
+  return data as T;
 }
 
 export type Me = {
