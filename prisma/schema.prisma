@@ -263,6 +263,7 @@ model Organization {
   decisions       Decision[]
   documents       OrgDocument[]
   healthSnapshots HealthScoreSnapshot[]
+  corporateBriefings CorporateGoalBriefing[]
 
   @@map("organizations")
 }
@@ -1434,6 +1435,7 @@ model Indicator {
   updatedAt      DateTime           @updatedAt @map("updated_at")
 
   readings IndicatorReading[]
+  corporateGoals CorporateGoal[]
 
   @@index([organizationId])
   @@index([level])
@@ -1823,6 +1825,7 @@ model Cycle {
   updatedAt      DateTime    @updatedAt @map("updated_at")
 
   goals CycleGoal[]
+  corporateBriefings CorporateGoalBriefing[]
 
   @@index([organizationId, status])
   @@map("cycles")
@@ -1951,6 +1954,63 @@ model CycleGoalReflection {
 
   @@unique([goalId, promptKey])
   @@map("cycle_goal_reflections")
+}
+
+// ============================================================
+// Metas da Corporação — briefing do dono por ciclo (Passo 1).
+// O briefing publica contexto/prioridades/restrições; líderes alinham
+// suas metas de ciclo a ele (análise vem no Passo 3).
+// ============================================================
+enum CorporateGoalBriefingStatus {
+  draft
+  published
+  ratified
+}
+
+model CorporateGoalBriefing {
+  id             String                       @id @default(uuid()) @db.Uuid
+  organizationId String                       @map("organization_id") @db.Uuid
+  cycleId        String                       @map("cycle_id") @db.Uuid
+  context        String?
+  priorities     String[]                     @default([])
+  constraints    String[]                     @default([])
+  status         CorporateGoalBriefingStatus  @default(draft)
+  createdBy      String?                      @map("created_by") @db.Uuid
+  updatedBy      String?                      @map("updated_by") @db.Uuid
+  // Histórico de atualizações `{ at, by, note, snapshot }` — regra
+  // transversal "nada é excluído": editar nunca sobrescreve.
+  revisions      Json                         @default("[]")
+  createdAt      DateTime                     @default(now()) @map("created_at")
+  updatedAt      DateTime                     @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  cycle        Cycle        @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  goals        CorporateGoal[]
+
+  @@unique([organizationId, cycleId])
+  @@index([organizationId])
+  @@index([cycleId])
+  @@map("corporate_goal_briefings")
+}
+
+model CorporateGoal {
+  id           String   @id @default(uuid()) @db.Uuid
+  briefingId   String   @map("briefing_id") @db.Uuid
+  title        String
+  indicatorId  String?  @map("indicator_id") @db.Uuid
+  targetValue  Float?   @map("target_value")
+  currentValue Float?   @map("current_value")
+  dueAt        DateTime?
+  orderIndex   Int      @default(0) @map("order_index")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  briefing  CorporateGoalBriefing @relation(fields: [briefingId], references: [id], onDelete: Cascade)
+  indicator Indicator?            @relation(fields: [indicatorId], references: [id], onDelete: SetNull)
+
+  @@index([briefingId])
+  @@index([indicatorId])
+  @@map("corporate_goals")
 }
 
 // ============================================================

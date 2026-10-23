@@ -150,6 +150,13 @@ const nav = [
     section: "Resultado",
     module: "resultado",
   },
+  {
+    to: "/app/goals/corporate",
+    label: "Metas da Corporação",
+    icon: Target,
+    section: "Resultado",
+    module: "resultado",
+  },
   { to: "/app/evolution", label: "Evolução", icon: Gauge, section: "Evolução", module: "evolucao" },
   {
     to: "/app/cycle-closure",
