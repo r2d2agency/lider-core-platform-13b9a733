@@ -45,7 +45,7 @@ Botão "Exportar CSV" no diálogo da rodada: visão por fator (percentual, class
 
 - Módulo `nr1` no `FEATURE_CATALOG` e no `TEMPLATE_DEFAULTS` por papel; `bootstrapFeatureTemplates()` faz backfill sem sobrescrever edição do admin; nav usa `module: "nr1"`; servidor trava com 403 em `nr1Router.param("orgId")` via `hasNr1Module()`.
 - Autorização por papel (`canManageNr1` → RH/responsável/líder de equipe; colaborador responde só pela rota pública com token).
-- **Parcial**: sem granularidade por equipe — um líder de equipe ainda vê o diagnóstico de outras equipes da mesma organização. Requer decisão de produto (item 10 da auditoria).
+- **Escopo por equipe** (`getManagedTeamIds()` em `api/src/routes/nr1.routes.ts`, decisão de produto 2026-10-26): líder (`role: leader`) vê e opera apenas nas equipes que lidera — detectadas por `membership.teamId`, `team.responsibleUserId` e `team.leaderMembershipId`. RH (`hr_admin`), dono (`franchise_owner`) e super/neo mantêm visão total. Listas filtram por `teamId` (líder sem equipe recebe vazio); mutações fora do escopo retornam 403. Denúncias seguem restritas a executivos (`isExec`), fora do alcance de líderes.
 
 ## 8. Auditoria técnica 2026-10-21 — estado (fechada 2026-10-22)
 
@@ -60,7 +60,7 @@ Botão "Exportar CSV" no diálogo da rodada: visão por fator (percentual, class
 | 7 | Sem gating de módulo | ✅ seção 7 deste documento |
 | 8 | Sem exportação | ✅ seção 6 deste documento |
 | 9 | `actionPlan` × `NR1Action` | ✅ dashboard conta `NR1Action` (status ≠ concluída/cancelada) |
-| 10 | Escopo de autorização por equipe | ⚠️ **parcial** — ver seção 7 |
+| 10 | Escopo de autorização por equipe | ✅ `getManagedTeamIds()` — líder vê só suas equipes; RH/exec/super total |
 | 11 | Vínculos `teamId`/`responsibleUserId`/`factorAnalysisId` | ✅ `validateActionLinks()` por organização |
 | 12 | Rota pública sem proteção | ✅ `publicRateLimit` + `respondentIp` gravado |
 | 13 | `POST /nr1/surveys` sem checar equipe | ✅ equipe conferida contra a organização |
