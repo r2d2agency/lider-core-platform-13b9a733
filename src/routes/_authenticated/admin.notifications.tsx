@@ -404,13 +404,30 @@ function TemplatesPanel() {
       qc.invalidateQueries({ queryKey: ["notifications", "templates"] });
     },
   });
+  const seedCorp = useMutation({
+    mutationFn: () =>
+      api<{ ok: boolean; created: string[] }>("/notifications/templates/seed-corporate-goals", {
+        method: "POST",
+      }),
+    onSuccess: (r) => {
+      toast.success(`Templates das Metas da Corporação carregados (${r.created.length})`);
+      qc.invalidateQueries({ queryKey: ["notifications", "templates"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   return (
     <div className="grid gap-6 md:grid-cols-[1fr_380px]">
       <div className="rounded-2xl border border-border bg-card">
-        <div className="border-b border-border p-4">
-          <h3 className="font-display text-lg">Templates cadastrados</h3>
-          <p className="text-xs text-muted-foreground">Use <code>{"{{1}}"}</code>, <code>{"{{2}}"}</code>… para variáveis (compatível com Meta).</p>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-4">
+          <div>
+            <h3 className="font-display text-lg">Templates cadastrados</h3>
+            <p className="text-xs text-muted-foreground">Use <code>{"{{1}}"}</code>, <code>{"{{2}}"}</code>… para variáveis (compatível com Meta).</p>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => seedCorp.mutate()} disabled={seedCorp.isPending}>
+            <Copy className="mr-1.5 h-3.5 w-3.5" strokeWidth={1.5} />
+            {seedCorp.isPending ? "Carregando…" : "Seed Metas da Corporação"}
+          </Button>
         </div>
         <div className="divide-y divide-border">
           {q.data?.map((t) => (

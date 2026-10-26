@@ -242,3 +242,73 @@ notificationsRouter.delete(
     res.status(204).end();
   },
 );
+
+// ----- Seed: templates das Metas da Corporação (§5.3 item 4 da spec) -----
+// Templates in_app documentam as 5 mensagens da funcionalidade para
+// treinamento (botão seed na tela Admin → Notificações). Idempotente.
+const CORP_GOALS_SEED = [
+  {
+    code: "goals_corp_briefing_published",
+    name: "Metas da Corporação — briefing publicado",
+    channel: "in_app",
+    subject: null,
+    body: "Novas metas da empresa para o ciclo {{ciclo}}: {{total_metas}} metas aguardando sua leitura.",
+    variables: ["ciclo", "total_metas"],
+  },
+  {
+    code: "goals_corp_analysis_submitted",
+    name: "Metas da Corporação — análise enviada",
+    channel: "in_app",
+    subject: null,
+    body: "Análise de metas de {{lider}} enviada para revisão — ciclo {{ciclo}}.",
+    variables: ["lider", "ciclo"],
+  },
+  {
+    code: "goals_corp_analysis_returned",
+    name: "Metas da Corporação — análise devolvida",
+    channel: "in_app",
+    subject: null,
+    body: "Sua análise de metas para o ciclo {{ciclo}} foi devolvida. Comentário: {{comentario}}",
+    variables: ["ciclo", "comentario"],
+  },
+  {
+    code: "goals_corp_analysis_approved",
+    name: "Metas da Corporação — análise aprovada",
+    channel: "in_app",
+    subject: null,
+    body: "Análise de metas aprovada para o ciclo {{ciclo}}.",
+    variables: ["ciclo"],
+  },
+  {
+    code: "goals_corp_briefing_ratified",
+    name: "Metas da Corporação — metas oficializadas",
+    channel: "in_app",
+    subject: null,
+    body: "Metas da Corporação oficializadas para o ciclo {{ciclo}}. Veja-as no painel Resultados.",
+    variables: ["ciclo"],
+  },
+] as const;
+
+notificationsRouter.post(
+  "/templates/seed-corporate-goals",
+  requireRoles("super_admin", "neo_admin"),
+  async (_req, res) => {
+    const created: string[] = [];
+    for (const t of CORP_GOALS_SEED) {
+      const tpl = await prisma.notificationTemplate.upsert({
+        where: { code: t.code },
+        update: { name: t.name, channel: t.channel, body: t.body, variables: [...t.variables] as never },
+        create: {
+          code: t.code,
+          name: t.name,
+          channel: t.channel,
+          subject: t.subject,
+          body: t.body,
+          variables: [...t.variables] as never,
+        },
+      });
+      created.push(tpl.code);
+    }
+    res.json({ ok: true, created });
+  },
+);
