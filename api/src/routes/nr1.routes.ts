@@ -132,6 +132,36 @@ async function isExec(userId: string, orgId: string) {
   });
   return !!m;
 }
+
+async function getManagedTeamIds(userId: string, orgId: string) {
+  const role = await orgRole(userId, orgId);
+  if (role === "hr_admin" || role === "franchise_owner") return null;
+  if (await isSuper(userId)) return null;
+  if (role !== "leader") return null;
+
+  const memberships = await prisma.membership.findMany({
+    where: { userId, organizationId: orgId },
+    select: { id: true, teamId: true },
+  });
+
+  const teamIds = new Set<string>();
+  for (const m of memberships) {
+    if (m.teamId) teamIds.add(m.teamId);
+  }
+
+  const teams = await prisma.team.findMany({
+    where: { organizationId: orgId },
+    select: { id: true, responsibleUserId: true, leaderMembershipId: true },
+  });
+
+  for (const t of teams) {
+    if (t.responsibleUserId === userId) teamIds.add(t.id);
+    const m = memberships.find((mm) => mm.id === t.leaderMembershipId);
+    if (m) teamIds.add(t.id);
+  }
+
+  return teamIds.size > 0 ? Array.from(teamIds) : [];
+}
 /**
  * O módulo NR-1 está ligado para este usuário? Super/neo admin não dependem
  * de template. Para os demais, basta qualquer feature `nr1.*` habilitada no
@@ -472,6 +502,13 @@ nr1Router.post("/:orgId/nr1/actions/:id/evidence", (req, res) => {
         discardUploadedFile(req.file.filename);
         return res.status(404).json({ error: "Ação não encontrada." });
       }
+      const managedTeamIds = await getManagedTeamIds(req.userId!, req.params.orgId);
+      if (managedTeamIds !== null) {
+        if (!action.teamId || !managedTeamIds.includes(action.teamId)) {
+          discardUploadedFile(req.file.filename);
+          return res.status(403).json({ error: "Ação fora de sua equipe." });
+        }
+      }
       const item = {
         url: `${(env.PUBLIC_API_URL || `${req.protocol}://${req.get("host")}`).replace(/\/$/, "")}/uploads/nr1-evidence/${req.file.filename}`,
         path: `/uploads/nr1-evidence/${req.file.filename}`,
@@ -504,6 +541,11 @@ nr1Router.get("/:orgId/nr1/actions", async (req, res) => {
     // ação vencida e não concluída aparece no filtro mesmo sem status
     // "overdue" no banco.
     const where: Prisma.NR1ActionWhereInput = { organizationId: req.params.orgId };
+    const managedTeamIds = await getManagedTeamIds(req.userId!, req.params.orgId);
+    if (managedTeamIds !== null) {
+      if (managedTeamIds.length === 0) return res.json([]);
+      where.teamId = { in: managedTeamIds };
+    }
     if (status === "overdue") {
       where.dueDate = { lt: new Date() };
       where.status = { in: ["not_started", "in_progress"] };
@@ -573,6 +615,10 @@ nr1Router.get("/:orgId/nr1/actions/import/template", (_req, res) => {
  */
 nr1Router.post("/:orgId/nr1/actions/import", async (req, res) => {
   try {
+    const managedTeamIds = await getManagedTeamIds(req.userId!, req.params.orgId);
+    if (managedTeamIds !== null && managedTeamIds.length === 0) {
+      return res.status(403).json({ error: "Sem equipe para importar ações." });
+    }
     const data = importSchema.parse(req.body);
     const created: Array<{ id: string; situation: string }> = [];
     const skipped: Array<{ row: number; situation: string; reason: string }> = [];
@@ -645,6 +691,17 @@ nr1Router.post("/:orgId/nr1/actions", async (req, res) => {
     const linkCheck = await validateActionLinks(req.params.orgId, data);
     if (linkCheck.error) return res.status(400).json({ error: linkCheck.error });
 
+    const orgId = req.params.orgId;
+    const managedTeamIds = await getManagedTeamIds(req.userId!, orgId);
+    if (managedTeamIds !== null) {
+      if (managedTeamIds.length === 0) {
+        return res.status(403).json({ error: "Sem equipe para criar ação." });
+      }
+      if (!data.teamId || !managedTeamIds.includes(data.teamId)) {
+        return res.status(403).json({ error: "Ação fora de sua equipe." });
+      }
+    }
+
     if (data.surveyId) {
       const survey = await prisma.nR1Survey.findFirst({
         where: { id: data.surveyId, organizationId: req.params.orgId },
@@ -700,6 +757,15 @@ nr1Router.patch("/:orgId/nr1/actions/:id", async (req, res) => {
       where: { id: req.params.id, organizationId: req.params.orgId },
     });
     if (!current) return res.status(404).json({ error: "Ação não encontrada." });
+    const managedTeamIds = await getManagedTeamIds(req.userId!, req.params.orgId);
+    if (managedTeamIds !== null) {
+      if (!current.teamId || !managedTeamIds.includes(current.teamId)) {
+        return res.status(403).json({ error: "Ação fora de sua equipe." });
+      }
+      if (data.teamId && managedTeamIds.includes(data.teamId) === false) {
+        return res.status(403).json({ error: "Não é possível mover para fora de sua equipe." });
+      }
+    }
     if (data.status === "cancelled" && !data.cancelReason?.trim() && !current.cancelReason) {
       return res.status(400).json({ error: "Ações canceladas precisam de justificativa." });
     }
@@ -787,6 +853,17 @@ nr1Router.patch("/:orgId/nr1/actions/:id", async (req, res) => {
 nr1Router.post("/:orgId/nr1/actions/:id/progress", async (req, res) => {
   try {
     const data = actionProgressSchema.parse(req.body);
+    const managedTeamIds = await getManagedTeamIds(req.userId!, req.params.orgId);
+    if (managedTeamIds !== null) {
+      const target = await prisma.nR1Action.findFirst({
+        where: { id: req.params.id, organizationId: req.params.orgId },
+        select: { teamId: true },
+      });
+      if (!target) return res.status(404).json({ error: "Ação não encontrada." });
+      if (!target.teamId || !managedTeamIds.includes(target.teamId)) {
+        return res.status(403).json({ error: "Ação fora de sua equipe." });
+      }
+    }
     // Leitura e gravação do histórico dentro da mesma transação: sem isso,
     // dois registros simultâneos (um progresso e uma evidência, por exemplo)
     // poderiam sobrescrever um ao outro.
@@ -815,9 +892,15 @@ nr1Router.delete("/:orgId/nr1/actions/:id", async (req, res) => {
   try {
     const existing = await prisma.nR1Action.findFirst({
       where: { id: req.params.id, organizationId: req.params.orgId },
-      select: { situation: true, agendaItemId: true },
+      select: { situation: true, agendaItemId: true, teamId: true },
     });
     if (!existing) return res.status(404).json({ error: "Ação não encontrada." });
+    const managedTeamIds = await getManagedTeamIds(req.userId!, req.params.orgId);
+    if (managedTeamIds !== null) {
+      if (!existing.teamId || !managedTeamIds.includes(existing.teamId)) {
+        return res.status(403).json({ error: "Ação fora de sua equipe." });
+      }
+    }
 
     // Remove o item da agenda vinculado (não-bloqueante)
     try {
@@ -835,8 +918,16 @@ nr1Router.delete("/:orgId/nr1/actions/:id", async (req, res) => {
 
 nr1Router.get("/:orgId/nr1/surveys", async (req, res) => {
   try {
+    const orgId = req.params.orgId;
+    const userId = req.userId!;
+    const managedTeamIds = await getManagedTeamIds(userId, orgId);
+    const where: Prisma.NR1SurveyWhereInput = { organizationId: orgId };
+    if (managedTeamIds !== null) {
+      if (managedTeamIds.length === 0) return res.json([]);
+      where.teamId = { in: managedTeamIds };
+    }
     const surveys = await prisma.nR1Survey.findMany({
-      where: { organizationId: req.params.orgId },
+      where,
       orderBy: { createdAt: "desc" },
       include: { _count: { select: { responses: true } } },
     });
@@ -919,6 +1010,12 @@ nr1Router.get("/:orgId/nr1/surveys/:id", async (req, res) => {
       },
     });
     if (!s) return res.status(404).json({ error: "Pesquisa não encontrada" });
+    const managedTeamIds = await getManagedTeamIds(req.userId!, req.params.orgId);
+    if (managedTeamIds !== null) {
+      if (!s.teamId || !managedTeamIds.includes(s.teamId)) {
+        return res.status(403).json({ error: "Fora de sua equipe." });
+      }
+    }
 
     const answersList = s.responses.map((r) => r.answers as NR1Answers);
     // Marco 3.5 — resultados só com o mínimo de respostas válidas (anonimato).
@@ -983,9 +1080,15 @@ nr1Router.put("/:orgId/nr1/surveys/:id/factor-analysis", async (req, res) => {
     const data = factorAnalysisSchema.parse(req.body);
     const survey = await prisma.nR1Survey.findFirst({
       where: { id: req.params.id, organizationId: req.params.orgId },
-      select: { id: true },
+      select: { id: true, teamId: true },
     });
     if (!survey) return res.status(404).json({ error: "Pesquisa não encontrada" });
+    const managedTeamIds = await getManagedTeamIds(req.userId!, req.params.orgId);
+    if (managedTeamIds !== null) {
+      if (!survey.teamId || !managedTeamIds.includes(survey.teamId)) {
+        return res.status(403).json({ error: "Fora de sua equipe." });
+      }
+    }
 
     const analysis = await prisma.nR1FactorAnalysis.upsert({
       where: {
@@ -1029,6 +1132,12 @@ nr1Router.post("/:orgId/nr1/surveys/:id/ai-analysis", async (req, res) => {
     include: { responses: true },
   });
   if (!survey) return res.status(404).json({ error: "Pesquisa não encontrada" });
+  const managedTeamIds = await getManagedTeamIds(req.userId!, req.params.orgId);
+  if (managedTeamIds !== null) {
+    if (!survey.teamId || !managedTeamIds.includes(survey.teamId)) {
+      return res.status(403).json({ error: "Fora de sua equipe." });
+    }
+  }
   if (survey.responses.length < NR1_MIN_RESPONSES) {
     return res.status(400).json({
       error: `São necessárias pelo menos ${NR1_MIN_RESPONSES} respostas para proteger o anonimato e gerar a análise.`,
@@ -1129,6 +1238,17 @@ const surveyUpdateSchema = z.object({
 nr1Router.patch("/:orgId/nr1/surveys/:id", async (req, res) => {
   try {
     const data = surveyUpdateSchema.parse(req.body);
+    const target = await prisma.nR1Survey.findFirst({
+      where: { id: req.params.id, organizationId: req.params.orgId },
+      select: { id: true, teamId: true },
+    });
+    if (!target) return res.status(404).json({ error: "Pesquisa não encontrada" });
+    const managedTeamIds = await getManagedTeamIds(req.userId!, req.params.orgId);
+    if (managedTeamIds !== null) {
+      if (!target.teamId || !managedTeamIds.includes(target.teamId)) {
+        return res.status(403).json({ error: "Fora de sua equipe." });
+      }
+    }
     const result = await prisma.nR1Survey.updateMany({
       where: { id: req.params.id, organizationId: req.params.orgId },
       data: {
@@ -1169,6 +1289,17 @@ nr1Router.patch("/:orgId/nr1/surveys/:id", async (req, res) => {
  */
 nr1Router.delete("/:orgId/nr1/surveys/:id", async (req, res) => {
   try {
+    const target = await prisma.nR1Survey.findFirst({
+      where: { id: req.params.id, organizationId: req.params.orgId },
+      select: { id: true, teamId: true },
+    });
+    if (!target) return res.status(404).json({ error: "Pesquisa não encontrada" });
+    const managedTeamIds = await getManagedTeamIds(req.userId!, req.params.orgId);
+    if (managedTeamIds !== null) {
+      if (!target.teamId || !managedTeamIds.includes(target.teamId)) {
+        return res.status(403).json({ error: "Fora de sua equipe." });
+      }
+    }
     const result = await prisma.nR1Survey.updateMany({
       where: { id: req.params.id, organizationId: req.params.orgId },
       data: { archivedAt: new Date(), status: "closed" },
@@ -1275,8 +1406,15 @@ async function syncNr1ToIndicators(orgId: string, userId: string) {
 nr1Router.get("/:orgId/nr1/indicators", async (req, res) => {
   try {
     const orgId = req.params.orgId;
+    const managedTeamIds = await getManagedTeamIds(req.userId!, orgId);
+    if (managedTeamIds !== null && managedTeamIds.length === 0) {
+      return res.json({ factors: [], series: [] });
+    }
     const surveys = await prisma.nR1Survey.findMany({
-      where: { organizationId: orgId },
+      where: {
+        organizationId: orgId,
+        ...(managedTeamIds !== null ? { teamId: { in: managedTeamIds } } : {}),
+      },
       orderBy: { createdAt: "desc" },
       include: { responses: true },
     });
