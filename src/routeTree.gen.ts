@@ -94,6 +94,7 @@ import { Route as AuthenticatedAppOrganizationAreasRouteImport } from './routes/
 import { Route as AuthenticatedAppOrganizationAgreementsRouteImport } from './routes/_authenticated/app.organization.agreements'
 import { Route as AuthenticatedAppOrganizationAgendaRouteImport } from './routes/_authenticated/app.organization.agenda'
 import { Route as AuthenticatedAppGoalsCorporateRouteImport } from './routes/_authenticated/app.goals.corporate'
+import { Route as AuthenticatedAppGoalsAnalysisRouteImport } from './routes/_authenticated/app.goals.analysis'
 import { Route as AuthenticatedAppGoalsAlignmentRouteImport } from './routes/_authenticated/app.goals.alignment'
 import { Route as AuthenticatedAppConscienciaPdiRouteImport } from './routes/_authenticated/app.consciencia.pdi'
 import { Route as AuthenticatedAppConscienciaLideradosRouteImport } from './routes/_authenticated/app.consciencia.liderados'
@@ -110,6 +111,7 @@ import { Route as AuthenticatedAdminNeoAuditRouteImport } from './routes/_authen
 import { Route as AuthenticatedAdminNeoAssessmentsRouteImport } from './routes/_authenticated/admin.neo.assessments'
 import { Route as AuthenticatedAdminNeoJourneysIndexRouteImport } from './routes/_authenticated/admin.neo.journeys.index'
 import { Route as AuthenticatedAdminNeoAssessmentsIndexRouteImport } from './routes/_authenticated/admin.neo.assessments.index'
+import { Route as AuthenticatedAppGoalsAnalysisIdRouteImport } from './routes/_authenticated/app.goals.analysis.$id'
 import { Route as AuthenticatedAdminNeoJourneysIdRouteImport } from './routes/_authenticated/admin.neo.journeys.$id'
 import { Route as AuthenticatedAdminNeoAssessmentsIdRouteImport } from './routes/_authenticated/admin.neo.assessments.$id'
 
@@ -589,6 +591,12 @@ const AuthenticatedAppGoalsCorporateRoute =
     path: '/goals/corporate',
     getParentRoute: () => AuthenticatedAppRoute,
   } as any)
+const AuthenticatedAppGoalsAnalysisRoute =
+  AuthenticatedAppGoalsAnalysisRouteImport.update({
+    id: '/goals/analysis',
+    path: '/goals/analysis',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
 const AuthenticatedAppGoalsAlignmentRoute =
   AuthenticatedAppGoalsAlignmentRouteImport.update({
     id: '/goals/alignment',
@@ -684,6 +692,12 @@ const AuthenticatedAdminNeoAssessmentsIndexRoute =
     id: '/',
     path: '/',
     getParentRoute: () => AuthenticatedAdminNeoAssessmentsRoute,
+  } as any)
+const AuthenticatedAppGoalsAnalysisIdRoute =
+  AuthenticatedAppGoalsAnalysisIdRouteImport.update({
+    id: '/$id',
+    path: '/$id',
+    getParentRoute: () => AuthenticatedAppGoalsAnalysisRoute,
   } as any)
 const AuthenticatedAdminNeoJourneysIdRoute =
   AuthenticatedAdminNeoJourneysIdRouteImport.update({
@@ -782,6 +796,7 @@ export interface FileRoutesByFullPath {
   '/app/consciencia/liderados': typeof AuthenticatedAppConscienciaLideradosRoute
   '/app/consciencia/pdi': typeof AuthenticatedAppConscienciaPdiRoute
   '/app/goals/alignment': typeof AuthenticatedAppGoalsAlignmentRoute
+  '/app/goals/analysis': typeof AuthenticatedAppGoalsAnalysisRouteWithChildren
   '/app/goals/corporate': typeof AuthenticatedAppGoalsCorporateRoute
   '/app/organization/agenda': typeof AuthenticatedAppOrganizationAgendaRoute
   '/app/organization/agreements': typeof AuthenticatedAppOrganizationAgreementsRoute
@@ -799,6 +814,7 @@ export interface FileRoutesByFullPath {
   '/app/team/': typeof AuthenticatedAppTeamIndexRoute
   '/admin/neo/assessments/$id': typeof AuthenticatedAdminNeoAssessmentsIdRoute
   '/admin/neo/journeys/$id': typeof AuthenticatedAdminNeoJourneysIdRoute
+  '/app/goals/analysis/$id': typeof AuthenticatedAppGoalsAnalysisIdRoute
   '/admin/neo/assessments/': typeof AuthenticatedAdminNeoAssessmentsIndexRoute
   '/admin/neo/journeys/': typeof AuthenticatedAdminNeoJourneysIndexRoute
 }
@@ -877,6 +893,7 @@ export interface FileRoutesByTo {
   '/app/consciencia/liderados': typeof AuthenticatedAppConscienciaLideradosRoute
   '/app/consciencia/pdi': typeof AuthenticatedAppConscienciaPdiRoute
   '/app/goals/alignment': typeof AuthenticatedAppGoalsAlignmentRoute
+  '/app/goals/analysis': typeof AuthenticatedAppGoalsAnalysisRouteWithChildren
   '/app/goals/corporate': typeof AuthenticatedAppGoalsCorporateRoute
   '/app/organization/agenda': typeof AuthenticatedAppOrganizationAgendaRoute
   '/app/organization/agreements': typeof AuthenticatedAppOrganizationAgreementsRoute
@@ -894,6 +911,7 @@ export interface FileRoutesByTo {
   '/app/team': typeof AuthenticatedAppTeamIndexRoute
   '/admin/neo/assessments/$id': typeof AuthenticatedAdminNeoAssessmentsIdRoute
   '/admin/neo/journeys/$id': typeof AuthenticatedAdminNeoJourneysIdRoute
+  '/app/goals/analysis/$id': typeof AuthenticatedAppGoalsAnalysisIdRoute
   '/admin/neo/assessments': typeof AuthenticatedAdminNeoAssessmentsIndexRoute
   '/admin/neo/journeys': typeof AuthenticatedAdminNeoJourneysIndexRoute
 }
@@ -983,6 +1001,7 @@ export interface FileRoutesById {
   '/_authenticated/app/consciencia/liderados': typeof AuthenticatedAppConscienciaLideradosRoute
   '/_authenticated/app/consciencia/pdi': typeof AuthenticatedAppConscienciaPdiRoute
   '/_authenticated/app/goals/alignment': typeof AuthenticatedAppGoalsAlignmentRoute
+  '/_authenticated/app/goals/analysis': typeof AuthenticatedAppGoalsAnalysisRouteWithChildren
   '/_authenticated/app/goals/corporate': typeof AuthenticatedAppGoalsCorporateRoute
   '/_authenticated/app/organization/agenda': typeof AuthenticatedAppOrganizationAgendaRoute
   '/_authenticated/app/organization/agreements': typeof AuthenticatedAppOrganizationAgreementsRoute
@@ -1000,6 +1019,7 @@ export interface FileRoutesById {
   '/_authenticated/app/team/': typeof AuthenticatedAppTeamIndexRoute
   '/_authenticated/admin/neo/assessments/$id': typeof AuthenticatedAdminNeoAssessmentsIdRoute
   '/_authenticated/admin/neo/journeys/$id': typeof AuthenticatedAdminNeoJourneysIdRoute
+  '/_authenticated/app/goals/analysis/$id': typeof AuthenticatedAppGoalsAnalysisIdRoute
   '/_authenticated/admin/neo/assessments/': typeof AuthenticatedAdminNeoAssessmentsIndexRoute
   '/_authenticated/admin/neo/journeys/': typeof AuthenticatedAdminNeoJourneysIndexRoute
 }
@@ -1089,6 +1109,7 @@ export interface FileRouteTypes {
     | '/app/consciencia/liderados'
     | '/app/consciencia/pdi'
     | '/app/goals/alignment'
+    | '/app/goals/analysis'
     | '/app/goals/corporate'
     | '/app/organization/agenda'
     | '/app/organization/agreements'
@@ -1106,6 +1127,7 @@ export interface FileRouteTypes {
     | '/app/team/'
     | '/admin/neo/assessments/$id'
     | '/admin/neo/journeys/$id'
+    | '/app/goals/analysis/$id'
     | '/admin/neo/assessments/'
     | '/admin/neo/journeys/'
   fileRoutesByTo: FileRoutesByTo
@@ -1184,6 +1206,7 @@ export interface FileRouteTypes {
     | '/app/consciencia/liderados'
     | '/app/consciencia/pdi'
     | '/app/goals/alignment'
+    | '/app/goals/analysis'
     | '/app/goals/corporate'
     | '/app/organization/agenda'
     | '/app/organization/agreements'
@@ -1201,6 +1224,7 @@ export interface FileRouteTypes {
     | '/app/team'
     | '/admin/neo/assessments/$id'
     | '/admin/neo/journeys/$id'
+    | '/app/goals/analysis/$id'
     | '/admin/neo/assessments'
     | '/admin/neo/journeys'
   id:
@@ -1289,6 +1313,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/consciencia/liderados'
     | '/_authenticated/app/consciencia/pdi'
     | '/_authenticated/app/goals/alignment'
+    | '/_authenticated/app/goals/analysis'
     | '/_authenticated/app/goals/corporate'
     | '/_authenticated/app/organization/agenda'
     | '/_authenticated/app/organization/agreements'
@@ -1306,6 +1331,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/team/'
     | '/_authenticated/admin/neo/assessments/$id'
     | '/_authenticated/admin/neo/journeys/$id'
+    | '/_authenticated/app/goals/analysis/$id'
     | '/_authenticated/admin/neo/assessments/'
     | '/_authenticated/admin/neo/journeys/'
   fileRoutesById: FileRoutesById
@@ -1917,6 +1943,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppGoalsCorporateRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
+    '/_authenticated/app/goals/analysis': {
+      id: '/_authenticated/app/goals/analysis'
+      path: '/goals/analysis'
+      fullPath: '/app/goals/analysis'
+      preLoaderRoute: typeof AuthenticatedAppGoalsAnalysisRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
     '/_authenticated/app/goals/alignment': {
       id: '/_authenticated/app/goals/alignment'
       path: '/goals/alignment'
@@ -2028,6 +2061,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/neo/assessments/'
       preLoaderRoute: typeof AuthenticatedAdminNeoAssessmentsIndexRouteImport
       parentRoute: typeof AuthenticatedAdminNeoAssessmentsRoute
+    }
+    '/_authenticated/app/goals/analysis/$id': {
+      id: '/_authenticated/app/goals/analysis/$id'
+      path: '/$id'
+      fullPath: '/app/goals/analysis/$id'
+      preLoaderRoute: typeof AuthenticatedAppGoalsAnalysisIdRouteImport
+      parentRoute: typeof AuthenticatedAppGoalsAnalysisRoute
     }
     '/_authenticated/admin/neo/journeys/$id': {
       id: '/_authenticated/admin/neo/journeys/$id'
@@ -2248,6 +2288,20 @@ const AuthenticatedAppTeamRouteChildren: AuthenticatedAppTeamRouteChildren = {
 const AuthenticatedAppTeamRouteWithChildren =
   AuthenticatedAppTeamRoute._addFileChildren(AuthenticatedAppTeamRouteChildren)
 
+interface AuthenticatedAppGoalsAnalysisRouteChildren {
+  AuthenticatedAppGoalsAnalysisIdRoute: typeof AuthenticatedAppGoalsAnalysisIdRoute
+}
+
+const AuthenticatedAppGoalsAnalysisRouteChildren: AuthenticatedAppGoalsAnalysisRouteChildren =
+  {
+    AuthenticatedAppGoalsAnalysisIdRoute: AuthenticatedAppGoalsAnalysisIdRoute,
+  }
+
+const AuthenticatedAppGoalsAnalysisRouteWithChildren =
+  AuthenticatedAppGoalsAnalysisRoute._addFileChildren(
+    AuthenticatedAppGoalsAnalysisRouteChildren,
+  )
+
 interface AuthenticatedAppRouteChildren {
   AuthenticatedApp360Route: typeof AuthenticatedApp360Route
   AuthenticatedAppAiRoute: typeof AuthenticatedAppAiRoute
@@ -2274,6 +2328,7 @@ interface AuthenticatedAppRouteChildren {
   AuthenticatedAppTeamRoute: typeof AuthenticatedAppTeamRouteWithChildren
   AuthenticatedAppIndexRoute: typeof AuthenticatedAppIndexRoute
   AuthenticatedAppGoalsAlignmentRoute: typeof AuthenticatedAppGoalsAlignmentRoute
+  AuthenticatedAppGoalsAnalysisRoute: typeof AuthenticatedAppGoalsAnalysisRouteWithChildren
   AuthenticatedAppGoalsCorporateRoute: typeof AuthenticatedAppGoalsCorporateRoute
 }
 
@@ -2305,6 +2360,8 @@ const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppTeamRoute: AuthenticatedAppTeamRouteWithChildren,
   AuthenticatedAppIndexRoute: AuthenticatedAppIndexRoute,
   AuthenticatedAppGoalsAlignmentRoute: AuthenticatedAppGoalsAlignmentRoute,
+  AuthenticatedAppGoalsAnalysisRoute:
+    AuthenticatedAppGoalsAnalysisRouteWithChildren,
   AuthenticatedAppGoalsCorporateRoute: AuthenticatedAppGoalsCorporateRoute,
 }
 

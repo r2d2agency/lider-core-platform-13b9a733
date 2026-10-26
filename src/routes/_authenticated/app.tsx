@@ -165,6 +165,13 @@ const nav = [
     section: "Resultado",
     module: "resultado",
   },
+  {
+    to: "/app/goals/analysis",
+    label: "Minha análise",
+    icon: NotebookPen,
+    section: "Resultado",
+    module: "resultado",
+  },
   { to: "/app/evolution", label: "Evolução", icon: Gauge, section: "Evolução", module: "evolucao" },
   {
     to: "/app/cycle-closure",
