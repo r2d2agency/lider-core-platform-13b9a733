@@ -1,7 +1,7 @@
 import { Router, type Response } from "express";
 import { z } from "zod";
 import { prisma } from "../prisma.js";
-import type { AppRole } from "@prisma/client";
+import { Prisma, type AppRole } from "@prisma/client";
 import { requireAuth } from "../auth.js";
 import { notifyInApp } from "../lib/notifications.js";
 
@@ -111,7 +111,7 @@ async function resolveNames(ids: Array<string | null | undefined>) {
 
 const ANALYSIS_INCLUDE = {
   items: {
-    orderBy: { orderIndex: "asc" as const },
+    orderBy: [{ orderIndex: "asc" }],
     include: {
       corporateGoal: {
         include: { indicator: { select: { id: true, name: true, unit: true } } },
@@ -119,7 +119,7 @@ const ANALYSIS_INCLUDE = {
     },
   },
   cycle: { select: { id: true, name: true, startAt: true, endAt: true, status: true } },
-};
+} satisfies Prisma.LeaderGoalAnalysisInclude;
 
 async function serialize(analysis: any) {
   const names = await resolveNames([analysis.authorUserId, analysis.reviewerUserId]);
