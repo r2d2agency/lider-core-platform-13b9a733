@@ -489,6 +489,22 @@ indicatorsRouter.get("/:orgId/results-overview", async (req, res) => {
     }),
   ]);
 
+  const corporateBriefing = activeCycle
+    ? await prisma.corporateGoalBriefing.findUnique({
+        where: {
+          organizationId_cycleId: { organizationId: orgId, cycleId: activeCycle.id },
+        },
+        include: {
+          goals: {
+            orderBy: { orderIndex: "asc" },
+            include: {
+              indicator: { select: { id: true, name: true, unit: true } },
+            },
+          },
+        },
+      })
+    : null;
+
   const scored = indicators.map(withStatus);
   const buckets = new Map<string, typeof scored>();
   for (const i of scored) {
@@ -549,6 +565,15 @@ indicatorsRouter.get("/:orgId/results-overview", async (req, res) => {
           startAt: activeCycle.startAt,
           endAt: activeCycle.endAt,
           goals: goalsRanked,
+          corporateGoals:
+            corporateBriefing?.status === "ratified"
+              ? corporateBriefing.goals.map((g) => ({
+                  id: g.id,
+                  title: g.title,
+                  targetValue: g.targetValue,
+                  indicator: g.indicator,
+                }))
+              : [],
         }
       : null,
   });

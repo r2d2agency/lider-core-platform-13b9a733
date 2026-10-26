@@ -111,7 +111,7 @@ async function resolveNames(ids: Array<string | null | undefined>) {
 
 const ANALYSIS_INCLUDE = {
   items: {
-    orderBy: { orderIndex: "asc" },
+    orderBy: { orderIndex: "asc" as const },
     include: {
       corporateGoal: {
         include: { indicator: { select: { id: true, name: true, unit: true } } },
