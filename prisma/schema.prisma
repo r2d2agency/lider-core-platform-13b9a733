@@ -257,13 +257,14 @@ model Organization {
   licenses        License[]
   onboardingItems OnboardingItem[]
 
-  orgRoles        OrgRole[]
-  rituals         Ritual[]
-  delegations     Delegation[]
-  decisions       Decision[]
-  documents       OrgDocument[]
-  healthSnapshots HealthScoreSnapshot[]
+  orgRoles           OrgRole[]
+  rituals            Ritual[]
+  delegations        Delegation[]
+  decisions          Decision[]
+  documents          OrgDocument[]
+  healthSnapshots    HealthScoreSnapshot[]
   corporateBriefings CorporateGoalBriefing[]
+  leaderGoalAnalyses LeaderGoalAnalysis[]
 
   @@map("organizations")
 }
@@ -1825,7 +1826,8 @@ model Cycle {
   updatedAt      DateTime    @updatedAt @map("updated_at")
 
   goals CycleGoal[]
-  corporateBriefings CorporateGoalBriefing[]
+  corporateBriefings  CorporateGoalBriefing[]
+  leaderGoalAnalyses  LeaderGoalAnalysis[]
 
   @@index([organizationId, status])
   @@map("cycles")
@@ -2007,10 +2009,62 @@ model CorporateGoal {
 
   briefing  CorporateGoalBriefing @relation(fields: [briefingId], references: [id], onDelete: Cascade)
   indicator Indicator?            @relation(fields: [indicatorId], references: [id], onDelete: SetNull)
+  analysisItems LeaderGoalAnalysisItem[]
 
   @@index([briefingId])
   @@index([indicatorId])
   @@map("corporate_goals")
+}
+
+enum LeaderGoalAnalysisStatus {
+  draft
+  submitted
+  returned
+  approved
+}
+
+model LeaderGoalAnalysis {
+  id             String                    @id @default(uuid()) @db.Uuid
+  organizationId String                    @map("organization_id") @db.Uuid
+  cycleId        String                    @map("cycle_id") @db.Uuid
+  authorUserId   String                    @map("author_user_id") @db.Uuid
+  reviewerUserId String?                   @map("reviewer_user_id") @db.Uuid
+  status         LeaderGoalAnalysisStatus @default(draft)
+  reviewComment  String?                   @map("review_comment")
+  submittedAt    DateTime?                 @map("submitted_at")
+  reviewedAt     DateTime?                 @map("reviewed_at")
+  createdAt      DateTime                  @default(now()) @map("created_at")
+  updatedAt      DateTime                  @updatedAt @map("updated_at")
+
+  organization Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  cycle        Cycle                   @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  items        LeaderGoalAnalysisItem[]
+
+  @@unique([organizationId, cycleId, authorUserId])
+  @@index([organizationId])
+  @@index([cycleId])
+  @@index([authorUserId])
+  @@index([reviewerUserId])
+  @@map("leader_goal_analyses")
+}
+
+model LeaderGoalAnalysisItem {
+  id                String   @id @default(uuid()) @db.Uuid
+  analysisId        String   @map("analysis_id") @db.Uuid
+  corporateGoalId   String   @map("corporate_goal_id") @db.Uuid
+  contribution      String
+  linkedCycleGoalIds String[] @default([]) @map("linked_cycle_goal_ids")
+  gap               String?
+  orderIndex        Int      @default(0) @map("order_index")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  analysis      LeaderGoalAnalysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  corporateGoal CorporateGoal       @relation(fields: [corporateGoalId], references: [id], onDelete: Cascade)
+
+  @@index([analysisId])
+  @@index([corporateGoalId])
+  @@map("leader_goal_analysis_items")
 }
 
 // ============================================================

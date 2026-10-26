@@ -95,7 +95,7 @@ type AttentionItem = {
   title: string;
   reason: string;
   severity: "high" | "medium" | "low";
-  kind: "one_on_one" | "feedback" | "delegation" | "ritual" | "onboarding" | "pdi" | "nr1";
+  kind: "one_on_one" | "feedback" | "delegation" | "ritual" | "onboarding" | "pdi" | "nr1" | "goal_analysis";
   link: string | null;
 };
 
@@ -337,6 +337,28 @@ meRouter.get("/home/attention", async (req, res) => {
         severity: "medium",
         kind: "nr1",
         link: "/app/nr1",
+      });
+    }
+
+    // 6. Análises de metas pendentes de revisão
+    const pendingAnalyses = await prisma.leaderGoalAnalysis.findMany({
+      where: {
+        organizationId: orgId,
+        reviewerUserId: userId,
+        status: "submitted",
+      },
+      include: { cycle: { select: { name: true } } },
+      orderBy: { submittedAt: "asc" },
+      take: 3,
+    });
+    for (const a of pendingAnalyses) {
+      items.push({
+        id: `goal-analysis-${a.id}`,
+        title: "Análise de metas para revisar",
+        reason: `Análise enviada para revisão — Ciclo ${a.cycle?.name ?? ""}`,
+        severity: "high",
+        kind: "goal_analysis",
+        link: `/app/goals/analysis/${a.id}`,
       });
     }
 
