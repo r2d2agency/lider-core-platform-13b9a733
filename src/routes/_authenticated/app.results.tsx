@@ -63,6 +63,13 @@ type AreaBlock = {
   health: number | null;
 };
 
+type CorporateGoalOverview = {
+  id: string;
+  title: string;
+  targetValue: number | null;
+  indicator: { id: string; name: string; unit: string | null } | null;
+};
+
 type Overview = {
   totals: Record<IndicatorStatus, number>;
   areas: AreaBlock[];
@@ -105,6 +112,7 @@ type Overview = {
         behaviorsAlignment: number | null;
       }>;
     }>;
+    corporateGoals?: CorporateGoalOverview[];
   } | null;
 };
 
@@ -402,6 +410,38 @@ function ResultsPage() {
             .
           </div>
         ) : (
+          <div className="space-y-4">
+            {(data.activeCycle.corporateGoals ?? []).length > 0 && (
+              <section aria-label="Metas da corporação" className="rounded-2xl border border-accent/30 bg-card p-4">
+                <div className="mb-3 flex items-center gap-2">
+                  <Target className="h-4 w-4 text-accent" />
+                  <h3 className="font-display text-base">Metas da corporação</h3>
+                  <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-accent">
+                    Corporação
+                  </span>
+                </div>
+                <ul className="divide-y divide-border">
+                  {(data.activeCycle.corporateGoals ?? []).map((cg) => (
+                    <li key={cg.id} className="flex flex-wrap items-center gap-2 py-2">
+                      <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-accent">
+                        Corporação
+                      </span>
+                      <span className="text-sm font-medium">{cg.title}</span>
+                      {cg.indicator && (
+                        <span className="text-xs text-muted-foreground">
+                          {cg.indicator.name}
+                          {cg.targetValue != null ? ` · meta ${cg.targetValue}` : ""}
+                          {cg.indicator.unit ? ` ${cg.indicator.unit}` : ""}
+                        </span>
+                      )}
+                      {!cg.indicator && cg.targetValue != null && (
+                        <span className="text-xs text-muted-foreground">meta {cg.targetValue}</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
           <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
             <ul className="divide-y divide-border rounded-2xl border border-border bg-card">
               {data.activeCycle.goals.map((g, idx) => {
@@ -479,6 +519,7 @@ function ResultsPage() {
                 Abrir gestão das metas <ArrowRight className="h-3.5 w-3.5" />
               </Link>
             </aside>
+          </div>
           </div>
         )}
       </section>
